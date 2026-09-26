@@ -12,63 +12,59 @@ permissions:
 jobs:
   fetch-audio:
     runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        include:
+          - file: spring-1-allegro.mp3
+            url: https://upload.wikimedia.org/wikipedia/commons/transcoded/1/18/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Spring%2C_RV_269_-_I._Allegro.ogg/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Spring%2C_RV_269_-_I._Allegro.ogg.mp3
+          - file: spring-2-largo.mp3
+            url: https://upload.wikimedia.org/wikipedia/commons/transcoded/3/39/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Spring%2C_RV_269_-_II._Largo.ogg/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Spring%2C_RV_269_-_II._Largo.ogg.mp3
+          - file: spring-3-allegro.mp3
+            url: https://upload.wikimedia.org/wikipedia/commons/transcoded/7/7c/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Spring%2C_RV_269_-_III._Allegro.ogg/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Spring%2C_RV_269_-_III._Allegro.ogg.mp3
+          - file: summer-1-allegro-non-molto.mp3
+            url: https://upload.wikimedia.org/wikipedia/commons/transcoded/3/3d/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Summer%2C_RV_315_-_I._Allegro_non_molto.ogg/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Summer%2C_RV_315_-_I._Allegro_non_molto.ogg.mp3
+          - file: summer-2-adagio.mp3
+            url: https://upload.wikimedia.org/wikipedia/commons/transcoded/1/17/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Summer%2C_RV_315_-_II._Adagio.ogg/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Summer%2C_RV_315_-_II._Adagio.ogg.mp3
+          - file: summer-3-presto.mp3
+            url: https://upload.wikimedia.org/wikipedia/commons/transcoded/1/17/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Summer%2C_RV_315_-_III._Presto.ogg/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Summer%2C_RV_315_-_III._Presto.ogg.mp3
+          - file: autumn-1-allegro.mp3
+            url: https://upload.wikimedia.org/wikipedia/commons/transcoded/c/c4/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Autumn%2C_RV_293_-_I._Allegro.ogg/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Autumn%2C_RV_293_-_I._Allegro.ogg.mp3
+          - file: autumn-2-adagio-molto.mp3
+            url: https://upload.wikimedia.org/wikipedia/commons/transcoded/8/83/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Autumn%2C_RV_293_-_II._Adagio_molto.ogg/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Autumn%2C_RV_293_-_II._Adagio_molto.ogg.mp3
+          - file: autumn-3-allegro.mp3
+            url: https://upload.wikimedia.org/wikipedia/commons/transcoded/7/79/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Autumn%2C_RV_293_-_III._Allegro.ogg/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Autumn%2C_RV_293_-_III._Allegro.ogg.mp3
+          - file: winter-1-allegro-non-molto.mp3
+            url: https://upload.wikimedia.org/wikipedia/commons/transcoded/9/9c/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Winter%2C_RV_297_-_I._Allegro_non_molto.ogg/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Winter%2C_RV_297_-_I._Allegro_non_molto.ogg.mp3
+          - file: winter-2-largo.mp3
+            url: https://upload.wikimedia.org/wikipedia/commons/transcoded/8/8b/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Winter%2C_RV_297_-_II._Largo.ogg/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Winter%2C_RV_297_-_II._Largo.ogg.mp3
+          - file: winter-3-allegro.mp3
+            url: https://upload.wikimedia.org/wikipedia/commons/transcoded/3/3d/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Winter%2C_RV_297_-_III._Allegro.ogg/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Winter%2C_RV_297_-_III._Allegro.ogg.mp3
+
     steps:
-      - name: Check out repository
+      - name: Check out current main
         uses: actions/checkout@v4
+        with:
+          ref: main
 
-      - name: Ensure ffmpeg is available
+      - name: Refresh main
         run: |
-          if ! command -v ffmpeg >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y ffmpeg
-          fi
+          git fetch origin main
+          git checkout -B main origin/main
 
-      - name: Download public-domain recordings and make game MP3s
+      - name: Download one Wikimedia MP3 transcode
+        env:
+          AUDIO_URL: ${{ matrix.url }}
+          AUDIO_FILE: ${{ matrix.file }}
         run: |
-          mkdir -p assets/audio/four-seasons source-audio
-          python3 - <<'PY'
-          import os, time, urllib.request, urllib.error
+          mkdir -p assets/audio/four-seasons
+          curl --fail --location --retry 5 --retry-all-errors --retry-delay 15 \
+            --user-agent "Vivaldi-Find-the-Music/1.0 (educational game; https://github.com/jasonatkinson123-sketch/vivaldi-find-the-music)" \
+            "$AUDIO_URL" -o "assets/audio/four-seasons/$AUDIO_FILE"
 
-          files = [
-              ("https://upload.wikimedia.org/wikipedia/commons/1/18/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Spring%2C_RV_269_-_I._Allegro.ogg", "spring-1-allegro"),
-              ("https://upload.wikimedia.org/wikipedia/commons/3/39/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Spring%2C_RV_269_-_II._Largo.ogg", "spring-2-largo"),
-              ("https://upload.wikimedia.org/wikipedia/commons/7/7c/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Spring%2C_RV_269_-_III._Allegro.ogg", "spring-3-allegro"),
-              ("https://upload.wikimedia.org/wikipedia/commons/3/3d/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Summer%2C_RV_315_-_I._Allegro_non_molto.ogg", "summer-1-allegro-non-molto"),
-              ("https://upload.wikimedia.org/wikipedia/commons/1/17/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Summer%2C_RV_315_-_II._Adagio.ogg", "summer-2-adagio"),
-              ("https://upload.wikimedia.org/wikipedia/commons/1/17/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Summer%2C_RV_315_-_III._Presto.ogg", "summer-3-presto"),
-              ("https://upload.wikimedia.org/wikipedia/commons/c/c4/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Autumn%2C_RV_293_-_I._Allegro.ogg", "autumn-1-allegro"),
-              ("https://upload.wikimedia.org/wikipedia/commons/8/83/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Autumn%2C_RV_293_-_II._Adagio_molto.ogg", "autumn-2-adagio-molto"),
-              ("https://upload.wikimedia.org/wikipedia/commons/7/79/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Autumn%2C_RV_293_-_III._Allegro.ogg", "autumn-3-allegro"),
-              ("https://upload.wikimedia.org/wikipedia/commons/9/9c/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Winter%2C_RV_297_-_I._Allegro_non_molto.ogg", "winter-1-allegro-non-molto"),
-              ("https://upload.wikimedia.org/wikipedia/commons/8/8b/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Winter%2C_RV_297_-_II._Largo.ogg", "winter-2-largo"),
-              ("https://upload.wikimedia.org/wikipedia/commons/3/3d/The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Winter%2C_RV_297_-_III._Allegro.ogg", "winter-3-allegro"),
-          ]
-
-          opener = urllib.request.build_opener()
-          opener.addheaders = [("User-Agent", "Vivaldi-Find-the-Music/1.0 (educational game)")]
-          for index, (url, shortname) in enumerate(files):
-              dest = os.path.join("source-audio", shortname + ".ogg")
-              print("Downloading", shortname)
-              for attempt in range(4):
-                  try:
-                      with opener.open(url, timeout=120) as response, open(dest, "wb") as out:
-                          out.write(response.read())
-                      break
-                  except urllib.error.HTTPError as exc:
-                      if exc.code != 429 or attempt == 3:
-                          raise
-                      delay = 10 * (attempt + 1)
-                      print(f"Rate limited; retrying in {delay}s")
-                      time.sleep(delay)
-              if index < len(files) - 1:
-                  time.sleep(1)
-          PY
-
-          for src in source-audio/*.ogg; do
-            base="$(basename "$src" .ogg)"
-            ffmpeg -hide_banner -loglevel error -y -i "$src" -vn -codec:a libmp3lame -b:a 128k -ar 44100 -ac 2 "assets/audio/four-seasons/$base.mp3"
-          done
-
+      - name: Add source note
+        run: |
           cat > assets/audio/four-seasons/SOURCES.md <<'EOF'
           # Vivaldi — The Four Seasons audio
 
@@ -77,20 +73,23 @@ jobs:
           Source: Wikimedia Commons / Musopen  
           Status: Public Domain Mark 1.0 on the Wikimedia Commons file pages.
 
-          The game MP3 files in this folder were transcoded at 128 kbps from the public-domain Ogg Vorbis source files on Wikimedia Commons.
+          These MP3 files are Wikimedia Commons transcodes of the public-domain source recordings.
 
           Source collection:
           https://commons.wikimedia.org/wiki/Category:The_Four_Seasons_(Vivaldi)
           EOF
 
-      - name: Commit audio files
+      - name: Commit this movement
+        env:
+          AUDIO_FILE: ${{ matrix.file }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/audio/four-seasons
+          git pull --rebase origin main
+          git add "assets/audio/four-seasons/$AUDIO_FILE" assets/audio/four-seasons/SOURCES.md
           if git diff --cached --quiet; then
-            echo "No audio changes to commit."
+            echo "No changes to commit."
             exit 0
           fi
-          git commit -m "Add public-domain Four Seasons recordings"
-          git push
+          git commit -m "Add $AUDIO_FILE"
+          git push origin HEAD:main
