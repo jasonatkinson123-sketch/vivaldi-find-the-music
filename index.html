@@ -203,11 +203,70 @@ function block(x,z,w,d,h,m){
 }
 function lamp(x,z){box(.12,2.7,.12,M.dark,x,1.35,z);const b=new THREE.Mesh(new THREE.SphereGeometry(.15,8,6),new THREE.MeshBasicMaterial({color:0xffcf8a}));b.position.set(x,2.72,z);scene.add(b);const l=new THREE.PointLight(0xffb96d,1.45,10.5,2.0);l.position.set(x,2.65,z);scene.add(l);lamps.push({light:l,bulb:b,phase:Math.random()*10})}
 
-const ground=new THREE.Mesh(new THREE.PlaneGeometry(74,74),new THREE.MeshStandardMaterial({color:0x222d3a,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-.04;scene.add(ground);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(92,92),new THREE.MeshStandardMaterial({color:0x222d3a,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-.04;scene.add(ground);
 box(26,.12,19,M.stone,-15,.01,15);box(8,.11,50,M.stone,-16,.02,-5);box(9,.11,50,M.stone,19,.02,-5);box(36,.11,7,M.stone,2,.02,-24);
 box(25.6,.035,2.2,M.snow,-15,.095,10.8);box(7.5,.035,14,M.snow,-16,.095,-1);box(8.5,.035,13,M.snow,19,.095,5);
 box(10.8,.08,61,M.ice,2,.01,-1.5);box(.45,.75,61,M.dark,-3.55,.33,-1.5);box(.45,.75,61,M.dark,7.55,.33,-1.5);
 obs.push({x1:-3.5,x2:7.5,z1:-31,z2:-.5},{x1:-3.5,x2:7.5,z1:4.6,z2:29});
+
+// OUTER CANAL LOOP --------------------------------------------------------
+// The central canal now opens into a full water circuit around the city.
+const outerCanal=new THREE.Group();scene.add(outerCanal);
+function canalSlab(w,d,x,z){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,.08,d),M.ice);
+  m.position.set(x,.01,z);outerCanal.add(m);return m;
+}
+function canalWall(w,d,x,z){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,.72,d),M.dark);
+  m.position.set(x,.33,z);outerCanal.add(m);return m;
+}
+
+// Water loop centered roughly at +/-34.
+canalSlab(73.4,5.6,0,34);
+canalSlab(73.4,5.6,0,-34);
+canalSlab(5.6,62.4,-34,0);
+canalSlab(5.6,62.4,34,0);
+
+// Short northern mouth connects the old canal to the ring.
+// The southern mouth already overlaps the bottom run.
+canalSlab(10.8,3.2,2,30.4);
+obs.push({x1:-3.5,x2:7.5,z1:29,z2:31});
+
+// Inner and outer embankments. Leave openings where the central canal joins.
+canalWall(27.2,.34,-17.4,31.08);
+canalWall(27.2,.34,22.4,31.08);
+canalWall(27.2,.34,-17.4,-31.08);
+canalWall(27.2,.34,22.4,-31.08);
+canalWall(.34,62.5,-31.08,0);
+canalWall(.34,62.5,31.08,0);
+
+canalWall(73.4,.34,0,36.82);
+canalWall(73.4,.34,0,-36.82);
+canalWall(.34,73.4,-36.82,0);
+canalWall(.34,73.4,36.82,0);
+
+// Repeating posts and warm lamps make the loop feel intentional rather than like a boundary.
+const loopPostMat=new THREE.MeshStandardMaterial({color:0x55483e,roughness:.98,map:texWood});
+const loopLampMat=new THREE.MeshBasicMaterial({color:0xffc87b});
+function loopPost(x,z){
+  const post=new THREE.Mesh(new THREE.CylinderGeometry(.075,.095,1.45,6),loopPostMat);
+  post.position.set(x,.65,z);outerCanal.add(post);
+}
+function loopLight(x,z){
+  loopPost(x,z);
+  const bulb=new THREE.Mesh(new THREE.SphereGeometry(.10,6,5),loopLampMat);
+  bulb.position.set(x,1.42,z);outerCanal.add(bulb);
+  const light=new THREE.PointLight(0xffb96d,.34,6.5,2);
+  light.position.set(x,1.42,z);outerCanal.add(light);
+}
+for(const x of[-27,-18,-9,10,19,28]){
+  loopPost(x,31.45);loopPost(x,-31.45);
+}
+for(const z of[-24,-12,0,12,24]){
+  loopPost(-31.45,z);loopPost(31.45,z);
+}
+loopLight(-18,31.45);loopLight(19,31.45);loopLight(-18,-31.45);loopLight(19,-31.45);
+loopLight(-31.45,-12);loopLight(-31.45,14);loopLight(31.45,-12);loopLight(31.45,14);
 box(11.4,.28,4.8,M.stone,2,.55,2.05);box(1.1,.5,4.8,M.dark,-3.2,.62,2.05);box(1.1,.5,4.8,M.dark,7.2,.62,2.05);
 
 // Chunky bridge rails and mooring poles make the canal read instantly as Venice.
@@ -824,6 +883,19 @@ for(let i=0;i<12;i++){
   makeCanalFish(fishColors[i%fishColors.length],i);
 }
 
+function outerLoopPoint(distance){
+  const side=68;
+  const perimeter=side*4;
+  let d=((distance%perimeter)+perimeter)%perimeter;
+  if(d<side)return {x:-34+d,z:-34,dx:1,dz:0};
+  d-=side;
+  if(d<side)return {x:34,z:-34+d,dx:0,dz:1};
+  d-=side;
+  if(d<side)return {x:34-d,z:34,dx:-1,dz:0};
+  d-=side;
+  return {x:-34,z:34-d,dx:0,dz:-1};
+}
+
 function updateFish(t){
   const winterSlow=world==="winter"&&!festivalMode;
   const speedFactor=winterSlow ? .38 : 1;
@@ -831,23 +903,35 @@ function updateFish(t){
 
   for(let i=0;i<canalFish.length;i++){
     const f=canalFish[i];
-    const travel=(t*f.speed*speedFactor+f.offsetZ)%54;
-    const z=f.direction>0 ? -27+travel : 27-travel;
-    const x=f.baseX+
-      Math.sin(t*.52+f.phase)*.48+
-      Math.sin(z*.22+f.phase)*.22;
 
-    const dz=f.direction*f.speed*speedFactor;
-    const dx=
-      Math.cos(t*.52+f.phase)*.48*.52+
-      Math.cos(z*.22+f.phase)*.22*.22*dz;
+    if(i<6){
+      const travel=(t*f.speed*speedFactor+f.offsetZ)%54;
+      const z=f.direction>0 ? -27+travel : 27-travel;
+      const x=f.baseX+
+        Math.sin(t*.52+f.phase)*.48+
+        Math.sin(z*.22+f.phase)*.22;
 
-    f.group.position.set(
-      THREE.MathUtils.clamp(x,-2.65,6.65),
-      .035+Math.sin(t*1.4+f.phase)*.010,
-      z
-    );
-    f.group.rotation.y=Math.atan2(dx,dz);
+      const dz=f.direction*f.speed*speedFactor;
+      const dx=
+        Math.cos(t*.52+f.phase)*.48*.52+
+        Math.cos(z*.22+f.phase)*.22*.22*dz;
+
+      f.group.position.set(
+        THREE.MathUtils.clamp(x,-2.65,6.65),
+        .035+Math.sin(t*1.4+f.phase)*.010,
+        z
+      );
+      f.group.rotation.y=Math.atan2(dx,dz);
+    }else{
+      const distance=t*(1.65+f.speed)*speedFactor+f.phase*18;
+      const p=outerLoopPoint(distance);
+      const lane=((i-6)%3-1)*.72;
+      const px=p.x-p.dz*lane;
+      const pz=p.z+p.dx*lane;
+      f.group.position.set(px,.035+Math.sin(t*1.25+f.phase)*.010,pz);
+      f.group.rotation.y=Math.atan2(p.dx,p.dz);
+    }
+
     f.tail.rotation.y=Math.sin(t*7.2*f.speed+f.phase)*.38;
     f.group.rotation.z=Math.sin(t*1.25+f.phase)*.025;
     f.bodyMat.opacity=opacity;
@@ -2533,8 +2617,8 @@ function boardBoat(){
   pitch=-.04;
   camera.rotation.set(pitch,yaw,0);
   info.innerHTML=mobile
-    ?"GONDOLA RIDE · LEFT — SAIL · RIGHT — LOOK<br>TAP DOCK / EXIT ANY TIME"
-    :"GONDOLA RIDE · W/S — MOVE · A/D — STEER<br>PRESS E OR SPACE TO DOCK / EXIT";
+    ?"GONDOLA LOOP · SAIL AROUND THE CITY<br>LEFT — SAIL · RIGHT — LOOK · TAP EXIT ANY TIME"
+    :"GONDOLA LOOP · SAIL AROUND THE CITY<br>W/S — MOVE · A/D — STEER · E / SPACE — EXIT";
   info.classList.add("show");
   setTimeout(()=>info.classList.remove("show"),3400);
 }
@@ -2582,20 +2666,32 @@ function updateBoat(dt,t){
   if(Math.abs(steer)<.04)steer=0;
   if(Math.abs(throttle)<.04)throttle=0;
 
-  boatYaw-=steer*1.18*dt*(.45+.55*Math.abs(throttle));
-  // Keep the boat broadly aligned with the canal so it remains easy to drive.
-  boatYaw=THREE.MathUtils.clamp(boatYaw,-2.42,-.72);
+  boatYaw-=steer*1.32*dt*(.45+.55*Math.abs(throttle));
+  boatYaw=Math.atan2(Math.sin(boatYaw),Math.cos(boatYaw));
 
   boatForward.set(Math.cos(boatYaw),0,-Math.sin(boatYaw));
-  const speed=3.0;
-  let nx=gondola.position.x+boatForward.x*throttle*speed*dt;
-  let nz=gondola.position.z+boatForward.z*throttle*speed*dt;
+  const speed=3.35;
+  const nx=gondola.position.x+boatForward.x*throttle*speed*dt;
+  const nz=gondola.position.z+boatForward.z*throttle*speed*dt;
 
-  // Northern stretch of canal: enough room for a real ride without clipping the bridge.
-  nx=THREE.MathUtils.clamp(nx,-2.75,6.72);
-  nz=THREE.MathUtils.clamp(nz,5.65,27.2);
-  gondola.position.x=nx;
-  gondola.position.z=nz;
+  // Central canal + an outer rectangular loop around the whole city.
+  function isBoatWater(x,z){
+    const central=(x>-2.75&&x<6.75&&z>-34.8&&z<34.8);
+    const north=(z>31.35&&z<36.25&&x>-36.25&&x<36.25);
+    const south=(z<-31.35&&z>-36.25&&x>-36.25&&x<36.25);
+    const west=(x<-31.35&&x>-36.25&&z>-36.25&&z<36.25);
+    const east=(x>31.35&&x<36.25&&z>-36.25&&z<36.25);
+    return central||north||south||west||east;
+  }
+
+  if(isBoatWater(nx,nz)){
+    gondola.position.x=nx;
+    gondola.position.z=nz;
+  }else{
+    // Sliding along one axis makes corners forgiving on phones and Chromebooks.
+    if(isBoatWater(nx,gondola.position.z))gondola.position.x=nx;
+    if(isBoatWater(gondola.position.x,nz))gondola.position.z=nz;
+  }
   gondola.rotation.y=boatYaw;
   gondola.position.y=.13+Math.sin(t*2.1)*.025;
   oar.rotation.z=-.08+Math.sin(t*4.0)*.08*Math.abs(throttle);
