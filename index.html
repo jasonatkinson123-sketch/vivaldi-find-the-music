@@ -344,10 +344,10 @@ function makeLabel(text,bg="#2b201d",fg="#fff1c7"){
   }
 
   x.fillStyle="#d7b36a";
-  x.font="34px Georgia,serif";
+  x.font="28px Georgia,serif";
   x.textAlign="center";x.textBaseline="middle";
-  x.fillText("❦",76,120);
-  x.fillText("❦",692,120);
+  x.fillText("❦",54,120);
+  x.fillText("❦",714,120);
 
   const words=String(text).trim().split(/\s+/);
   let lines=[words.join(" ")];
@@ -361,8 +361,8 @@ function makeLabel(text,bg="#2b201d",fg="#fff1c7"){
     lines=[words.slice(0,best).join(" "),words.slice(best).join(" ")];
   }
 
-  const maxWidth=548;
-  let size=lines.length===1?72:57;
+  const maxWidth=500;
+  let size=lines.length===1?66:51;
   while(size>38){
     x.font=`600 ${size}px Georgia,serif`;
     if(lines.every(line=>x.measureText(line).width<=maxWidth))break;
@@ -374,15 +374,15 @@ function makeLabel(text,bg="#2b201d",fg="#fff1c7"){
   x.shadowColor="#000";
   x.shadowBlur=8;
   x.shadowOffsetY=3;
-  const y0=lines.length===1?121:91;
-  const gap=65;
+  const y0=lines.length===1?120:88;
+  const gap=61;
   lines.forEach((line,i)=>x.fillText(line,384,y0+i*gap));
   x.shadowBlur=0;x.shadowOffsetY=0;
 
   const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;
   tex.minFilter=THREE.LinearFilter;
-  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:true}));
-  sprite.scale.set(4.55,1.42,1);
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
+  sprite.scale.set(4.85,1.46,1);
   return sprite;
 }
 
@@ -789,7 +789,7 @@ const storefrontB=makeStorefront(22.15,10.5,-Math.PI/2);
 function setStoreSign(store,name){
   if(store.sign)store.group.remove(store.sign);
   store.sign=makeLabel(name.toUpperCase(),"#171219","#e8cf95");
-  store.sign.position.set(0,3.48,.08);store.sign.scale.multiplyScalar(.70);store.group.add(store.sign);
+  store.sign.position.set(0,3.48,.08);store.sign.scale.multiplyScalar(.72);store.group.add(store.sign);
 }
 
 function updateSeasonShops(season){
