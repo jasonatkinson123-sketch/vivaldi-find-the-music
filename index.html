@@ -128,7 +128,7 @@ for(const z of[-.68,.68]){
   post.position.set(.88,.65,z);dock.add(post);
 }
 const gondolaSign=makeLabel("GONDOLA","#17131a","#e8d39b");
-gondolaSign.position.set(1.1,1.6,0);gondolaSign.scale.multiplyScalar(.58);dock.add(gondolaSign);
+gondolaSign.position.set(1.1,1.68,0);gondolaSign.scale.multiplyScalar(.64);dock.add(gondolaSign);
 const dockLamp=new THREE.PointLight(0xffcb79,.75,7,1.8);dockLamp.position.set(.7,1.35,0);dock.add(dockLamp);
 
 block(-27,13,9,13,7.5,M.a);block(-27,-3,9,13,10,M.b);block(-27,-20,9,13,8.4,M.c);block(-10,-10,8.5,13,8.8,M.a);block(-10,-24,8.5,11,7.3,M.b);block(14,16,7,10,8.4,M.c);block(26,13,8,13,10,M.a);block(27,-4,8,14,8.2,M.b);block(27,-22,8,13,9.6,M.c);block(13,-29,10,6,7.8,M.a);
@@ -308,17 +308,81 @@ const orb=new THREE.Mesh(new THREE.SphereGeometry(.28,10,8),new THREE.MeshBasicM
 const warm=new THREE.PointLight(0xff8f4d,2.1,13,1.6);warm.position.set(0,2.2,.4);shrine.add(warm);
 
 // KEY SHOP ---------------------------------------------------------------
-function makeLabel(text,bg="#16111d",fg="#f2d48b"){
+function makeLabel(text,bg="#2b201d",fg="#fff1c7"){
   const canvas=document.createElement("canvas");
-  canvas.width=512;canvas.height=160;
+  canvas.width=768;canvas.height=240;
   const x=canvas.getContext("2d");
-  x.fillStyle=bg;x.fillRect(0,0,canvas.width,canvas.height);
-  x.strokeStyle="#c7a660";x.lineWidth=8;x.strokeRect(7,7,canvas.width-14,canvas.height-14);
-  x.fillStyle=fg;x.font="bold 54px Georgia,serif";x.textAlign="center";x.textBaseline="middle";
-  x.fillText(text,canvas.width/2,canvas.height/2+3);
+
+  const wood=x.createLinearGradient(0,0,0,canvas.height);
+  wood.addColorStop(0,"#3a2a24");
+  wood.addColorStop(.45,bg);
+  wood.addColorStop(1,"#1c1515");
+  x.fillStyle=wood;
+  x.fillRect(8,8,canvas.width-16,canvas.height-16);
+
+  x.globalAlpha=.16;
+  x.strokeStyle="#d2a56d";
+  x.lineWidth=3;
+  for(let i=0;i<7;i++){
+    const yy=34+i*28;
+    x.beginPath();
+    x.moveTo(34,yy);
+    x.bezierCurveTo(180,yy-7,360,yy+9,734,yy-3);
+    x.stroke();
+  }
+  x.globalAlpha=1;
+
+  x.strokeStyle="#7d5a2f";x.lineWidth=14;x.strokeRect(12,12,744,216);
+  x.strokeStyle="#d6b468";x.lineWidth=5;x.strokeRect(24,24,720,192);
+  x.strokeStyle="#5e4325";x.lineWidth=2;x.strokeRect(33,33,702,174);
+
+  for(const px of [31,737])for(const py of [31,209]){
+    x.beginPath();x.arc(px,py,7,0,Math.PI*2);
+    x.fillStyle="#e0bd70";x.fill();
+    x.beginPath();x.arc(px-2,py-2,2.2,0,Math.PI*2);
+    x.fillStyle="#fff0b4";x.fill();
+  }
+
+  x.fillStyle="#d7b36a";
+  x.font="34px Georgia,serif";
+  x.textAlign="center";x.textBaseline="middle";
+  x.fillText("❦",76,120);
+  x.fillText("❦",692,120);
+
+  const words=String(text).trim().split(/\s+/);
+  let lines=[words.join(" ")];
+  if(text.length>16&&words.length>1){
+    let best=1,bestDiff=999;
+    for(let i=1;i<words.length;i++){
+      const a=words.slice(0,i).join(" "),b=words.slice(i).join(" ");
+      const diff=Math.abs(a.length-b.length);
+      if(diff<bestDiff){best=i;bestDiff=diff}
+    }
+    lines=[words.slice(0,best).join(" "),words.slice(best).join(" ")];
+  }
+
+  const maxWidth=548;
+  let size=lines.length===1?72:57;
+  while(size>38){
+    x.font=`600 ${size}px Georgia,serif`;
+    if(lines.every(line=>x.measureText(line).width<=maxWidth))break;
+    size-=2;
+  }
+
+  x.textAlign="center";x.textBaseline="middle";
+  x.fillStyle=fg;
+  x.shadowColor="#000";
+  x.shadowBlur=8;
+  x.shadowOffsetY=3;
+  const y0=lines.length===1?121:91;
+  const gap=65;
+  lines.forEach((line,i)=>x.fillText(line,384,y0+i*gap));
+  x.shadowBlur=0;x.shadowOffsetY=0;
+
   const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;
-  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true}));
-  sprite.scale.set(3.9,1.22,1);
+  tex.minFilter=THREE.LinearFilter;
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:true}));
+  sprite.scale.set(4.55,1.42,1);
   return sprite;
 }
 
@@ -725,7 +789,7 @@ const storefrontB=makeStorefront(22.15,10.5,-Math.PI/2);
 function setStoreSign(store,name){
   if(store.sign)store.group.remove(store.sign);
   store.sign=makeLabel(name.toUpperCase(),"#171219","#e8cf95");
-  store.sign.position.set(0,3.42,.08);store.sign.scale.multiplyScalar(.56);store.group.add(store.sign);
+  store.sign.position.set(0,3.48,.08);store.sign.scale.multiplyScalar(.70);store.group.add(store.sign);
 }
 
 function updateSeasonShops(season){
@@ -739,7 +803,7 @@ function updateSeasonShops(season){
 function prepareInterior(config){
   if(interiorTitle)shopInterior.remove(interiorTitle);
   interiorTitle=makeLabel(config.name.toUpperCase(),"#171218","#ead5a2");
-  interiorTitle.position.set(0,3.72,-4.82);interiorTitle.scale.multiplyScalar(.72);shopInterior.add(interiorTitle);
+  interiorTitle.position.set(0,3.72,-4.82);interiorTitle.scale.multiplyScalar(.78);shopInterior.add(interiorTitle);
 
   roomWallMat.color.setHex(config.palette||0x6b574b);
   keeperBody.material.color.setHex(config.isKeyShop?0x4a384e:0x5c3340);
