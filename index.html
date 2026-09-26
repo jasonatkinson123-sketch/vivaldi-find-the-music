@@ -301,8 +301,189 @@ function bench(x,z,rot=0){
   for(const px of[-.52,.52]){const leg=new THREE.Mesh(new THREE.BoxGeometry(.12,.48,.12),propMetal);leg.position.set(px,.24,0);g.add(leg)}
   g.position.set(x,0,z);g.rotation.y=rot;propRoot.add(g);
 }
+
 crate(-20.6,18.5);barrel(-20.2,-9.2);crate(-14.5,-20.2,.62);barrel(20.2,11.1);
 crate(20.2,-10.4,.66);barrel(18.0,-21.4,.62);bench(-19,9.1,0);bench(18,1.0,Math.PI);
+
+// SECOND DETAIL PASS ------------------------------------------------------
+// Small, selective details are clustered rather than evenly distributed.
+// The goal is lived-in Venice without turning the level into visual noise.
+const atmosphereRoot=new THREE.Group();scene.add(atmosphereRoot);
+const laundryPieces=[],waterGlints=[],pigeons=[];
+let catTail=null;
+
+function rodBetween(a,b,r=.018,mat=propMetal){
+  const dir=new THREE.Vector3().subVectors(b,a),len=dir.length();
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,len,5),mat);
+  m.position.copy(a).add(b).multiplyScalar(.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.clone().normalize());
+  atmosphereRoot.add(m);
+  return m;
+}
+
+function laundryLine(a,b,colors,phase=0){
+  const A=new THREE.Vector3(a[0],a[1],a[2]),B=new THREE.Vector3(b[0],b[1],b[2]);
+  rodBetween(A,B,.014,new THREE.MeshStandardMaterial({color:0x51463e,roughness:1}));
+  const clothMat=colors.map(col=>new THREE.MeshStandardMaterial({
+    color:col,roughness:.98,side:THREE.DoubleSide
+  }));
+  const dir=new THREE.Vector3().subVectors(B,A);
+  for(let i=0;i<colors.length;i++){
+    const u=(i+1)/(colors.length+1);
+    const p=A.clone().addScaledVector(dir,u);
+    p.y-=.12+Math.sin(u*Math.PI)*.18;
+    const cloth=new THREE.Mesh(new THREE.PlaneGeometry(.46+(i%2)*.12,.66-(i%3)*.06),clothMat[i]);
+    cloth.position.copy(p);
+    cloth.rotation.y=Math.atan2(dir.x,dir.z);
+    cloth.rotation.x=.02;
+    atmosphereRoot.add(cloth);
+    laundryPieces.push({mesh:cloth,phase:phase+i*.77,baseY:p.y,baseZ:cloth.rotation.z});
+  }
+}
+// Two memorable laundry alleys: one west, one east.
+laundryLine([-22.0,5.2,-1.5],[-14.65,5.05,-1.5],[0xb64f4f,0xe7d8b9,0x496f88,0xc68d45,0xe1c7c4],.2);
+laundryLine([17.72,5.0,14.2],[21.58,5.22,14.2],[0xe7d8b9,0x6e8764,0x934857,0xd7ad65],1.7);
+
+function wallShrine(x,y,z,rot=0){
+  const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=rot;atmosphereRoot.add(g);
+  const niche=new THREE.Mesh(
+    new THREE.BoxGeometry(.68,1.0,.18),
+    new THREE.MeshStandardMaterial({color:0x4b3d38,roughness:.96,map:texStone})
+  );
+  g.add(niche);
+  const inset=new THREE.Mesh(
+    new THREE.PlaneGeometry(.48,.73),
+    new THREE.MeshBasicMaterial({color:0x8d714c})
+  );
+  inset.position.z=.101;g.add(inset);
+  const saint=new THREE.Mesh(
+    new THREE.ConeGeometry(.12,.38,5),
+    new THREE.MeshStandardMaterial({color:0xd0b36f,roughness:.82})
+  );
+  saint.position.set(0,.05,.16);g.add(saint);
+  const halo=new THREE.Mesh(
+    new THREE.TorusGeometry(.12,.018,5,10),
+    new THREE.MeshBasicMaterial({color:0xffd577})
+  );
+  halo.position.set(0,.24,.17);g.add(halo);
+  const candle=new THREE.Mesh(
+    new THREE.CylinderGeometry(.025,.03,.14,5),
+    new THREE.MeshStandardMaterial({color:0xf0e4c6,roughness:.9})
+  );
+  candle.position.set(.19,-.31,.17);g.add(candle);
+  const flame=new THREE.Mesh(
+    new THREE.SphereGeometry(.032,5,4),
+    new THREE.MeshBasicMaterial({color:0xffc05c})
+  );
+  flame.position.set(.19,-.21,.17);g.add(flame);
+  const glow=new THREE.PointLight(0xffb75c,.32,3.2,2.0);glow.position.set(0,0,.35);g.add(glow);
+  g.userData.glow=glow;g.userData.phase=Math.random()*6;
+}
+wallShrine(-22.02,2.15,-6.2,Math.PI/2);
+wallShrine(21.60,2.35,-4.2,-Math.PI/2);
+wallShrine(-9.7,2.1,-16.72,Math.PI);
+
+function flowerBox(x,y,z,rot=0,palette=0xa84f6b){
+  const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=rot;atmosphereRoot.add(g);
+  const boxM=new THREE.MeshStandardMaterial({color:0x6a4432,roughness:.98,map:texWood});
+  const leafM=new THREE.MeshStandardMaterial({color:0x4f7645,roughness:.98});
+  const bloomM=new THREE.MeshStandardMaterial({color:palette,roughness:.94});
+  const planter=new THREE.Mesh(new THREE.BoxGeometry(.92,.20,.26),boxM);g.add(planter);
+  for(let i=0;i<5;i++){
+    const stem=new THREE.Mesh(new THREE.CylinderGeometry(.018,.025,.34,4),leafM);
+    stem.position.set(-.34+i*.17,.20,0);stem.rotation.z=(i-2)*.10;g.add(stem);
+    const bloom=new THREE.Mesh(new THREE.DodecahedronGeometry(.08,0),i%2?bloomM:leafM);
+    bloom.position.set(-.34+i*.17,.39-Math.abs(i-2)*.015,0);g.add(bloom);
+  }
+}
+flowerBox(-22.0,3.55,15.3,Math.PI/2,0xb65c76);
+flowerBox(-22.0,4.05,-4.0,Math.PI/2,0xd29b49);
+flowerBox(21.6,3.7,16.8,-Math.PI/2,0xb88b48);
+flowerBox(21.6,3.45,-18.0,-Math.PI/2,0x8f5776);
+
+// Canal-level damp staining: broad, low-poly strips rather than a detailed texture.
+const dampMat=new THREE.MeshStandardMaterial({color:0x465845,roughness:1,transparent:true,opacity:.52});
+for(const x of[-3.53,7.53]){
+  const strip=new THREE.Mesh(new THREE.BoxGeometry(.05,.36,54),dampMat);
+  strip.position.set(x,.20,-1.0);atmosphereRoot.add(strip);
+}
+
+// Tiny water light streaks. They stay subtle and only become active away from frozen Winter.
+const glintMat=new THREE.MeshBasicMaterial({color:0xffd79a,transparent:true,opacity:0,depthWrite:false});
+for(let i=0;i<14;i++){
+  const gl=new THREE.Mesh(new THREE.PlaneGeometry(.16+(i%4)*.08,.9+(i%3)*.35),glintMat.clone());
+  gl.rotation.x=-Math.PI/2;
+  gl.rotation.z=(i%2?-.09:.08);
+  gl.position.set(THREE.MathUtils.randFloat(-2.8,6.8),.105,THREE.MathUtils.randFloat(-25,25));
+  gl.userData={phase:i*.61,baseOpacity:.06+(i%4)*.018};
+  atmosphereRoot.add(gl);waterGlints.push(gl);
+}
+
+// A few intentionally crude pigeons: tiny silhouettes give the plaza life.
+function makePigeon(x,z,phase){
+  const g=new THREE.Group();g.position.set(x,.11,z);atmosphereRoot.add(g);
+  const bodyM=new THREE.MeshStandardMaterial({color:0x73757a,roughness:.96});
+  const darkM=new THREE.MeshStandardMaterial({color:0x464a50,roughness:.96});
+  const beakM=new THREE.MeshStandardMaterial({color:0xc69455,roughness:.9});
+  const body=new THREE.Mesh(new THREE.SphereGeometry(.12,6,4),bodyM);body.scale.set(1.2,.8,.9);body.position.y=.10;g.add(body);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.07,6,4),darkM);head.position.set(.10,.21,.02);g.add(head);
+  const beak=new THREE.Mesh(new THREE.ConeGeometry(.025,.08,4),beakM);beak.rotation.z=-Math.PI/2;beak.position.set(.19,.20,.02);g.add(beak);
+  pigeons.push({group:g,head,phase,baseY:g.position.y});
+}
+makePigeon(-18.1,7.7,.2);makePigeon(-17.45,7.95,1.1);makePigeon(-18.7,8.18,2.2);makePigeon(17.4,-2.0,3.1);
+
+// One low-poly alley cat. Mostly a silhouette; the tail gives it just enough life.
+function makeCat(x,z,rot=0){
+  const g=new THREE.Group();g.position.set(x,.05,z);g.rotation.y=rot;atmosphereRoot.add(g);
+  const fur=new THREE.MeshStandardMaterial({color:0x4a403a,roughness:.98});
+  const body=new THREE.Mesh(new THREE.SphereGeometry(.24,7,5),fur);body.scale.set(1.35,.75,.72);body.position.y=.27;g.add(body);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.15,7,5),fur);head.position.set(.31,.42,0);g.add(head);
+  for(const zz of[-.07,.07]){
+    const ear=new THREE.Mesh(new THREE.ConeGeometry(.055,.13,4),fur);ear.position.set(.30,.58,zz);g.add(ear);
+  }
+  const tail=new THREE.Mesh(new THREE.CylinderGeometry(.025,.04,.62,5),fur);
+  tail.position.set(-.37,.43,0);tail.rotation.z=-.72;g.add(tail);catTail=tail;
+}
+makeCat(-18.7,9.45,.35);
+
+// Three small calle plaques create the suggestion of a larger mapped city.
+function streetPlaque(text,x,y,z,rot=0){
+  const cv=document.createElement("canvas");cv.width=256;cv.height=96;
+  const q=cv.getContext("2d");q.fillStyle="#e1d4b8";q.fillRect(0,0,256,96);
+  q.strokeStyle="#705d4d";q.lineWidth=7;q.strokeRect(5,5,246,86);
+  q.fillStyle="#372d2a";q.font="bold 27px Georgia,serif";q.textAlign="center";q.textBaseline="middle";
+  q.fillText(text,128,49);
+  const tx=new THREE.CanvasTexture(cv);tx.colorSpace=THREE.SRGBColorSpace;tx.magFilter=THREE.NearestFilter;
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(1.55,.58),new THREE.MeshBasicMaterial({map:tx}));
+  m.position.set(x,y,z);m.rotation.y=rot;atmosphereRoot.add(m);
+}
+streetPlaque("CALLE DEL FORNO",-22.01,4.35,-8.0,Math.PI/2);
+streetPlaque("CORTE DELLE MASCHERE",21.59,4.25,8.2,-Math.PI/2);
+streetPlaque("PONTE DELLE STAGIONI",5.7,1.85,4.40,Math.PI);
+
+function updateAtmosphere(t){
+  const breeze=.55+.45*Math.sin(t*.23);
+  for(const p of laundryPieces){
+    p.mesh.position.y=p.baseY+Math.sin(t*.9+p.phase)*.025*breeze;
+    p.mesh.rotation.z=p.baseZ+Math.sin(t*1.15+p.phase)*.045*breeze;
+    p.mesh.rotation.x=.02+Math.sin(t*.72+p.phase)*.018;
+  }
+  for(const g of atmosphereRoot.children){
+    if(g.userData&&g.userData.glow){
+      g.userData.glow.intensity=.27+.07*Math.sin(t*2.4+g.userData.phase);
+    }
+  }
+  const waterOn=festivalMode||world!=="winter";
+  for(const gl of waterGlints){
+    gl.material.opacity=waterOn?Math.max(0,gl.userData.baseOpacity*(.5+.5*Math.sin(t*1.1+gl.userData.phase))):0;
+  }
+  for(const p of pigeons){
+    p.group.position.y=p.baseY+Math.max(0,Math.sin(t*1.7+p.phase))*.012;
+    p.head.rotation.z=Math.sin(t*2.2+p.phase)*.14;
+    p.group.rotation.y+=Math.sin(t*.19+p.phase)*.0008;
+  }
+  if(catTail)catTail.rotation.z=-.72+Math.sin(t*.72)*.10;
+}
 
 
 // Six simple gold zecchini. A zecchino was a Venetian gold coin in Vivaldi's era.
@@ -1051,7 +1232,11 @@ function makeStorefront(x,z,rot){
   const display=new THREE.Mesh(new THREE.BoxGeometry(.72,.52,.62),propWood);display.position.set(1.28,.28,.43);display.rotation.y=.08;g.add(display);
 
   const light=new THREE.PointLight(0xffc477,1.15,7.5,1.8);light.position.set(0,2.28,.8);g.add(light);
-  return {group:g,light,sign:null};
+
+  // A few goods spill onto the street and change with each seasonal shop.
+  const spill=new THREE.Group();spill.position.set(0,.05,.72);g.add(spill);
+
+  return {group:g,light,sign:null,spill};
 }
 
 const storefrontA=makeStorefront(-22.15,13.2,Math.PI/2);
@@ -1063,12 +1248,43 @@ function setStoreSign(store,name){
   store.sign.position.set(0,3.48,.02);store.sign.scale.multiplyScalar(.72);store.group.add(store.sign);
 }
 
+function clearGroupChildren(g){
+  while(g.children.length){
+    const o=g.children.pop();
+    o.traverse?.(n=>{
+      if(n.geometry)n.geometry.dispose?.();
+      if(n.material){
+        const mats=Array.isArray(n.material)?n.material:[n.material];
+        for(const m of mats)m.dispose?.();
+      }
+    });
+  }
+}
+function setShopSpill(store,config){
+  clearGroupChildren(store.spill);
+
+  // Two tiny product displays are enough to identify the shop without blocking the door.
+  for(let i=0;i<2;i++){
+    const p=makeShopProduct(config.product);
+    p.scale.setScalar(config.product==="mask"?.40:config.product==="bread"?.38:.34);
+    p.position.set(i===0?-1.22:1.18,.18+(i%2)*.04,.04+(i===0?.02:.12));
+    p.rotation.y=(i===0?-.18:.22);
+    store.spill.add(p);
+  }
+
+  // Low stool / basket base under one item.
+  const base=new THREE.Mesh(new THREE.CylinderGeometry(.34,.40,.22,7),propWood);
+  base.position.set(-1.22,.11,.03);store.spill.add(base);
+}
+
 function updateSeasonShops(season){
   const pair=seasonShopConfigs[season];
   setStoreSign(storefrontA,pair[0].name);
   setStoreSign(storefrontB,pair[1].name);
   storefrontA.light.color.setHex(pair[0].palette);
   storefrontB.light.color.setHex(pair[1].palette);
+  setShopSpill(storefrontA,pair[0]);
+  setShopSpill(storefrontB,pair[1]);
 }
 
 function prepareInterior(config){
@@ -1145,6 +1361,8 @@ function updateStorefronts(t){
   if(!started||transitioning||(gameComplete&&!festivalMode)||inShop||boating)return;
   storefrontA.light.intensity=.85+.25*Math.sin(t*1.7);
   storefrontB.light.intensity=.85+.25*Math.sin(t*1.9+1.3);
+  if(storefrontA.sign)storefrontA.sign.rotation.z=Math.sin(t*.55)*.004;
+  if(storefrontB.sign)storefrontB.sign.rotation.z=Math.sin(t*.49+1.4)*.004;
   if(performance.now()<shopCooldown)return;
 
   const pair=seasonShopConfigs[world];
@@ -2110,7 +2328,7 @@ for(const coin of coins){
   coin.position.y=coin.userData.baseY+Math.sin(t*2.1+coin.userData.phase)*.12;
   if(camera.position.distanceTo(coin.position)<1.15) collectCoin(coin);
 }
-updateInteriorShop();updateStorefronts(t);updateShopAndDoor(t);updateEnemies(dt,t);updateFestival(dt,t);mood(t);violin.rotation.y=Math.sin(t*.5)*.03;renderer.render(scene,camera)}
+updateInteriorShop();updateStorefronts(t);updateShopAndDoor(t);updateEnemies(dt,t);updateFestival(dt,t);updateAtmosphere(t);mood(t);violin.rotation.y=Math.sin(t*.5)*.03;renderer.render(scene,camera)}
 animate();
 addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.25))});
 </script>
