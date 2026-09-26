@@ -28,7 +28,7 @@ button{appearance:none;background:transparent;border:1px solid #444;color:#eee;p
 <div id="info">WASD — MOVE<br>MOUSE — LOOK</div>
 <div id="pause"><button id="resume">Return to Venice</button></div>
 <div id="found"><div><div class="n">Antonio Vivaldi</div><div class="w">Winter</div><div class="s">The Four Seasons — 1725</div></div></div>
-<div id="hud">Zecchini<br><strong><span id="coinCount">0</span> / 6</strong></div>
+<div id="hud"><span id="worldName">Winter</span><br><strong><span id="coinCount">0</span> / 6 Zecchini</strong></div>
 <div id="collectFlash"></div>
 <div id="worldFade"></div>
 <div id="touch"><div id="moveZone" class="zone left"></div><div id="lookZone" class="zone right"></div><div id="base"><div id="knob"></div></div><div id="hint">LEFT — MOVE &nbsp;&nbsp; RIGHT — LOOK</div></div>
@@ -42,7 +42,7 @@ const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0d1b2d); scene
 const camera=new THREE.PerspectiveCamera(68,innerWidth/innerHeight,.1,120); camera.position.set(-23,1.7,22); camera.rotation.order="YXZ";
 const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); renderer.setSize(innerWidth,innerHeight); renderer.outputColorSpace=THREE.SRGBColorSpace; document.body.prepend(renderer.domElement);
 
-const veil=document.querySelector("#veil"),enter=document.querySelector("#enter"),info=document.querySelector("#info"),pause=document.querySelector("#pause"),resume=document.querySelector("#resume"),found=document.querySelector("#found"),moveZone=document.querySelector("#moveZone"),lookZone=document.querySelector("#lookZone"),base=document.querySelector("#base"),knob=document.querySelector("#knob"),hud=document.querySelector("#hud"),coinCount=document.querySelector("#coinCount"),collectFlash=document.querySelector("#collectFlash"),worldFade=document.querySelector("#worldFade");
+const veil=document.querySelector("#veil"),enter=document.querySelector("#enter"),info=document.querySelector("#info"),pause=document.querySelector("#pause"),resume=document.querySelector("#resume"),found=document.querySelector("#found"),moveZone=document.querySelector("#moveZone"),lookZone=document.querySelector("#lookZone"),base=document.querySelector("#base"),knob=document.querySelector("#knob"),hud=document.querySelector("#hud"),worldName=document.querySelector("#worldName"),coinCount=document.querySelector("#coinCount"),collectFlash=document.querySelector("#collectFlash"),worldFade=document.querySelector("#worldFade");
 const mobile=matchMedia("(pointer:coarse)").matches||("ontouchstart"in window); if(mobile){document.body.classList.add("mobile");enter.textContent="Tap to Enter"}
 let started=false,done=false,yaw=0,pitch=-.03,mx=0,my=0,moveId=null,lookId=null,ox=0,oy=0,lx=0,ly=0,collected=0,portalActive=false,transitioning=false,world="winter";
 
@@ -89,14 +89,25 @@ lamp(-20,14);lamp(-12,4);lamp(-13,-14);lamp(14,8);lamp(17,-9);
 
 // Six simple gold zecchini. A zecchino was a Venetian gold coin in Vivaldi's era.
 const coins=[];
-const coinPositions=[
-  [-18,1.05,13],
-  [-15,1.05,-3],
-  [-10.5,1.05,-18],
-  [11.5,1.05,7],
-  [18.5,1.05,-9],
-  [17.5,1.05,-23]
-];
+const seasonCoinPositions={
+  winter:[
+    [-18,1.05,13],[-15,1.05,-3],[-10.5,1.05,-18],
+    [11.5,1.05,7],[18.5,1.05,-9],[17.5,1.05,-23]
+  ],
+  spring:[
+    [-21,1.05,17],[-14,1.05,1],[-11,1.05,-21],
+    [12,1.05,13],[20,1.05,-4],[15,1.05,-24]
+  ],
+  summer:[
+    [-19,1.05,9],[-16,1.05,-11],[-8.5,1.05,-24],
+    [13,1.05,18],[20,1.05,1],[18,1.05,-19]
+  ],
+  autumn:[
+    [-22,1.05,14],[-14,1.05,-6],[-12,1.05,-23],
+    [12,1.05,8],[21,1.05,-8],[14,1.05,-25]
+  ]
+};
+const coinPositions=seasonCoinPositions.winter;
 const coinMat=new THREE.MeshStandardMaterial({color:0xf5c542,metalness:.72,roughness:.25,emissive:0x5b3900,emissiveIntensity:.28});
 const coinEdge=new THREE.MeshStandardMaterial({color:0xffdc62,metalness:.78,roughness:.2,emissive:0x684200,emissiveIntensity:.24});
 for(let i=0;i<coinPositions.length;i++){
@@ -130,6 +141,19 @@ function coinChime(){
   });
 }
 
+function resetCoins(season){
+  collected=0;
+  coinCount.textContent="0";
+  const positions=seasonCoinPositions[season];
+  for(let i=0;i<coins.length;i++){
+    const coin=coins[i],p=positions[i];
+    coin.position.set(...p);
+    coin.userData.baseY=p[1];
+    coin.userData.collected=false;
+    coin.visible=true;
+  }
+}
+
 function collectCoin(coin){
   if(coin.userData.collected)return;
   coin.userData.collected=true;
@@ -139,6 +163,18 @@ function collectCoin(coin){
   coinChime();
 
   if(collected===coins.length){
+    if(world==="autumn"){
+      collectFlash.textContent="The Four Seasons Complete";
+      collectFlash.classList.add("show");
+      setTimeout(()=>collectFlash.classList.remove("show"),3200);
+      found.querySelector(".n").textContent="Antonio Vivaldi";
+      found.querySelector(".w").textContent="The Four Seasons";
+      found.querySelector(".s").textContent="Venice — 1725";
+      found.classList.add("show");
+      setTimeout(()=>found.classList.remove("show"),6200);
+      return;
+    }
+
     collectFlash.textContent="Portal Open";
     collectFlash.classList.add("show");
     setTimeout(()=>collectFlash.classList.remove("show"),1200);
@@ -188,10 +224,19 @@ const portalRing=new THREE.Mesh(
 portalGroup.add(portalRing);
 
 function activatePortal(){
-  if(portalActive||world!=="winter")return;
+  if(portalActive||world==="autumn")return;
   portalActive=true;
   portalGroup.visible=true;
-  warm.color.setHex(0x9fffdc);
+
+  const colors={
+    winter:0x9fffdc,
+    spring:0xffe58c,
+    summer:0xffb36b
+  };
+  const color=colors[world]||0xffffff;
+  warm.color.setHex(color);
+  portalDisk.material.color.setHex(color);
+  portalRing.material.color.setHex(0xffffff);
   warm.intensity=5.4;
 }
 
@@ -222,6 +267,57 @@ for(let i=0;i<34;i++){
   const side=i%2===0?-1:1;
   flower.position.set(side*THREE.MathUtils.randFloat(8.5,24),.14,THREE.MathUtils.randFloat(-26,24));
   springDecor.add(flower);
+}
+
+
+// Summer: fuller green crowns and little golden points of light.
+const summerDecor=new THREE.Group();
+summerDecor.visible=false;
+scene.add(summerDecor);
+const summerLeafMat=new THREE.MeshStandardMaterial({color:0x4d7f45,roughness:.9});
+const summerGoldMat=new THREE.MeshBasicMaterial({color:0xffd777});
+for(let i=0;i<treeSpots.length;i++){
+  const [x,z]=treeSpots[i];
+  const tree=new THREE.Group();
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.19,.28,2.25,6),trunkMat);
+  trunk.position.y=1.12;tree.add(trunk);
+  const crown=new THREE.Mesh(new THREE.DodecahedronGeometry(1.12,0),summerLeafMat);
+  crown.position.y=2.55;crown.scale.set(1.12,1,1.08);tree.add(crown);
+  tree.position.set(x,0,z);summerDecor.add(tree);
+}
+for(let i=0;i<22;i++){
+  const glow=new THREE.Mesh(new THREE.SphereGeometry(.045,5,4),summerGoldMat);
+  glow.position.set(THREE.MathUtils.randFloat(-24,24),THREE.MathUtils.randFloat(.8,3.2),THREE.MathUtils.randFloat(-26,24));
+  glow.userData.phase=i*.63;
+  summerDecor.add(glow);
+}
+
+// Autumn: ochre / red crowns and leaf-like ground dots.
+const autumnDecor=new THREE.Group();
+autumnDecor.visible=false;
+scene.add(autumnDecor);
+const autumnMats=[
+  new THREE.MeshStandardMaterial({color:0xb55d36,roughness:.95}),
+  new THREE.MeshStandardMaterial({color:0xd58a3b,roughness:.95}),
+  new THREE.MeshStandardMaterial({color:0x8f4a36,roughness:.95})
+];
+for(let i=0;i<treeSpots.length;i++){
+  const [x,z]=treeSpots[i];
+  const tree=new THREE.Group();
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.18,.25,2.1,6),trunkMat);
+  trunk.position.y=1.05;tree.add(trunk);
+  const crown=new THREE.Mesh(new THREE.DodecahedronGeometry(1.02,0),autumnMats[i%autumnMats.length]);
+  crown.position.y=2.42;crown.scale.set(1.08,.95,1.05);tree.add(crown);
+  tree.position.set(x,0,z);autumnDecor.add(tree);
+}
+for(let i=0;i<48;i++){
+  const leaf=new THREE.Mesh(
+    new THREE.CircleGeometry(.05,5),
+    new THREE.MeshBasicMaterial({color:i%3===0?0xffc35a:(i%3===1?0xc96a3a:0x9f4d32),side:THREE.DoubleSide})
+  );
+  leaf.rotation.x=-Math.PI/2;
+  leaf.position.set(THREE.MathUtils.randFloat(-25,25),.12,THREE.MathUtils.randFloat(-27,25));
+  autumnDecor.add(leaf);
 }
 
 
@@ -324,78 +420,179 @@ function makeSpringMusic(){
   return buf;
 }
 
+function makeSummerMusic(){
+  const ctx=listener.context,sr=ctx.sampleRate,step=.18;
+  const chords=[
+    [220.00,261.63,329.63,440.00],
+    [196.00,246.94,293.66,392.00],
+    [233.08,293.66,349.23,466.16],
+    [207.65,261.63,311.13,415.30]
+  ];
+  const pattern=[0,3,2,3,1,3,2,1];
+  const total=chords.length*pattern.length*step;
+  const buf=ctx.createBuffer(1,Math.floor(total*sr),sr);
+  const data=buf.getChannelData(0);
+  function add(freq,start,dur,amp){
+    const a=Math.floor(start*sr),b=Math.min(data.length,Math.floor((start+dur)*sr));
+    for(let i=a;i<b;i++){
+      const t=(i-a)/sr,env=Math.min(1,t/.01)*Math.exp(-3.6*t/dur),ph=2*Math.PI*freq*t;
+      data[i]+=amp*env*(Math.sin(ph)+.21*Math.sin(ph*2)+.06*Math.sin(ph*3));
+    }
+  }
+  let n=0;
+  for(let c=0;c<chords.length;c++)for(let s=0;s<pattern.length;s++,n++){
+    const start=n*step;add(chords[c][pattern[s]],start,step*.88,.16);
+    if(s===0)add(chords[c][0]/2,start,step*2.5,.08);
+  }
+  let peak=.001;for(let i=0;i<data.length;i++)peak=Math.max(peak,Math.abs(data[i]));
+  const gain=.72/peak;for(let i=0;i<data.length;i++)data[i]*=gain;
+  return buf;
+}
+
+function makeAutumnMusic(){
+  const ctx=listener.context,sr=ctx.sampleRate,step=.24;
+  const chords=[
+    [261.63,329.63,392.00,523.25],
+    [293.66,369.99,440.00,587.33],
+    [220.00,277.18,329.63,440.00],
+    [246.94,311.13,369.99,493.88]
+  ];
+  const pattern=[0,1,2,3,2,1,3,2];
+  const total=chords.length*pattern.length*step;
+  const buf=ctx.createBuffer(1,Math.floor(total*sr),sr);
+  const data=buf.getChannelData(0);
+  function add(freq,start,dur,amp){
+    const a=Math.floor(start*sr),b=Math.min(data.length,Math.floor((start+dur)*sr));
+    for(let i=a;i<b;i++){
+      const t=(i-a)/sr,env=Math.min(1,t/.014)*Math.exp(-2.9*t/dur),ph=2*Math.PI*freq*t;
+      data[i]+=amp*env*(Math.sin(ph)+.18*Math.sin(ph*2));
+    }
+  }
+  let n=0;
+  for(let c=0;c<chords.length;c++)for(let s=0;s<pattern.length;s++,n++){
+    const start=n*step;add(chords[c][pattern[s]],start,step*.9,.16);
+    if(s===0||s===4)add(chords[c][0]/2,start,step*1.6,.07);
+  }
+  let peak=.001;for(let i=0;i<data.length;i++)peak=Math.max(peak,Math.abs(data[i]));
+  const gain=.72/peak;for(let i=0;i<data.length;i++)data[i]*=gain;
+  return buf;
+}
+
+function setSeasonTitle(name){
+  found.querySelector(".n").textContent="Antonio Vivaldi";
+  found.querySelector(".w").textContent=name;
+  found.querySelector(".s").textContent="The Four Seasons — 1725";
+  found.classList.add("show");
+  setTimeout(()=>found.classList.remove("show"),5200);
+}
+
+function resetPlayer(){
+  camera.position.set(-23,1.7,22);
+  yaw=0;pitch=-.03;camera.rotation.set(pitch,yaw,0);
+}
+
+function playSeasonMusic(buffer){
+  if(music.isPlaying)music.stop();
+  music.setBuffer(buffer);
+  music.setLoop(true);
+  music.setVolume(.95);
+  music.setRefDistance(8);
+  music.setRolloffFactor(.6);
+  loaded=true;
+  usingPrototype=true;
+  low.frequency.setValueAtTime(15000,listener.context.currentTime);
+  music.play();
+}
+
 function enterSpring(){
   if(transitioning||world!=="winter")return;
   transitioning=true;
   worldFade.classList.add("show");
 
   setTimeout(()=>{
-    world="spring";
-    portalActive=false;
-    portalGroup.visible=false;
-    springDecor.visible=true;
+    world="spring";portalActive=false;portalGroup.visible=false;
+    springDecor.visible=true;summerDecor.visible=false;autumnDecor.visible=false;
 
     scene.background.setHex(0x79b6cf);
-    scene.fog.color.setHex(0xa8cfcb);
-    scene.fog.near=15;
-    scene.fog.far=66;
-
+    scene.fog.color.setHex(0xa8cfcb);scene.fog.near=15;scene.fog.far=66;
     ground.material.color.setHex(0x667e55);
-    M.snow.color.setHex(0xa8b88b);
-    M.stone.color.setHex(0x8b8275);
-    M.dark.color.setHex(0x50565a);
-    M.a.color.setHex(0x9a806f);
-    M.b.color.setHex(0x87949a);
-    M.c.color.setHex(0x967a82);
-    M.roof.color.setHex(0x554d4a);
-    M.ice.color.setHex(0x4d91ad);
-    M.ice.emissive.setHex(0x15394b);
-    M.ice.emissiveIntensity=.18;
+    M.snow.color.setHex(0xa8b88b);M.stone.color.setHex(0x8b8275);M.dark.color.setHex(0x50565a);
+    M.a.color.setHex(0x9a806f);M.b.color.setHex(0x87949a);M.c.color.setHex(0x967a82);M.roof.color.setHex(0x554d4a);
+    M.ice.color.setHex(0x4d91ad);M.ice.emissive.setHex(0x15394b);M.ice.emissiveIntensity=.18;
+    moon.material.color.setHex(0xffe6a1);moon.position.set(-24,20,-35);moon.scale.setScalar(1.35);
+    moonLight.color.setHex(0xffefca);moonLight.intensity=2.25;
+    flakes.material.color.setHex(0xffdce8);flakes.material.size=.11;flakes.material.opacity=.52;
 
-    moon.material.color.setHex(0xffe6a1);
-    moon.position.set(-24,20,-35);
-    moon.scale.setScalar(1.35);
-    moonLight.color.setHex(0xffefca);
-    moonLight.intensity=2.25;
-
-    flakes.material.color.setHex(0xffdce8);
-    flakes.material.size=.11;
-    flakes.material.opacity=.52;
-
-    for(const q of lamps){
-      q.light.color.setHex(0xffd28c);
-      q.light.intensity=1.15;
-    }
-
-    if(music.isPlaying)music.stop();
-    music.setBuffer(makeSpringMusic());
-    music.setLoop(true);
-    music.setVolume(.95);
-    music.setRefDistance(8);
-    music.setRolloffFactor(.6);
-    loaded=true;
-    usingPrototype=true;
-    low.frequency.setValueAtTime(15000,listener.context.currentTime);
-    music.play();
-
-    camera.position.set(-23,1.7,22);
-    yaw=0;
-    pitch=-.03;
-    camera.rotation.set(pitch,yaw,0);
-
-    hud.innerHTML='World II<br><strong>Spring</strong>';
-    const name=found.querySelector(".n"),work=found.querySelector(".w"),sub=found.querySelector(".s");
-    name.textContent="Antonio Vivaldi";
-    work.textContent="Spring";
-    sub.textContent="The Four Seasons — 1725";
-    found.classList.add("show");
-    setTimeout(()=>found.classList.remove("show"),5200);
+    resetCoins("spring");
+    worldName.textContent="Spring";
+    resetPlayer();
+    playSeasonMusic(makeSpringMusic());
+    setSeasonTitle("Spring");
 
     worldFade.classList.remove("show");
     transitioning=false;
   },780);
 }
 
+function enterSummer(){
+  if(transitioning||world!=="spring")return;
+  transitioning=true;
+  worldFade.classList.add("show");
+
+  setTimeout(()=>{
+    world="summer";portalActive=false;portalGroup.visible=false;
+    springDecor.visible=false;summerDecor.visible=true;autumnDecor.visible=false;
+
+    scene.background.setHex(0x65a9cf);
+    scene.fog.color.setHex(0xa8c9c4);scene.fog.near=18;scene.fog.far=72;
+    ground.material.color.setHex(0x78835a);
+    M.snow.color.setHex(0xaab779);M.stone.color.setHex(0x9b8b72);M.dark.color.setHex(0x5b5148);
+    M.a.color.setHex(0xb38968);M.b.color.setHex(0x9a8b78);M.c.color.setHex(0xaa7e68);M.roof.color.setHex(0x66564b);
+    M.ice.color.setHex(0x3c8fb2);M.ice.emissive.setHex(0x0f3f55);M.ice.emissiveIntensity=.22;
+    moon.material.color.setHex(0xffe08a);moon.position.set(-18,17,-35);moon.scale.setScalar(1.55);
+    moonLight.color.setHex(0xffd89b);moonLight.intensity=2.55;
+    flakes.material.color.setHex(0xffe38e);flakes.material.size=.055;flakes.material.opacity=.34;
+
+    resetCoins("summer");
+    worldName.textContent="Summer";
+    resetPlayer();
+    playSeasonMusic(makeSummerMusic());
+    setSeasonTitle("Summer");
+
+    worldFade.classList.remove("show");
+    transitioning=false;
+  },780);
+}
+
+function enterAutumn(){
+  if(transitioning||world!=="summer")return;
+  transitioning=true;
+  worldFade.classList.add("show");
+
+  setTimeout(()=>{
+    world="autumn";portalActive=false;portalGroup.visible=false;
+    springDecor.visible=false;summerDecor.visible=false;autumnDecor.visible=true;
+
+    scene.background.setHex(0x8d6954);
+    scene.fog.color.setHex(0x9b7a66);scene.fog.near=14;scene.fog.far=62;
+    ground.material.color.setHex(0x6e6145);
+    M.snow.color.setHex(0x8f7a4e);M.stone.color.setHex(0x806e5e);M.dark.color.setHex(0x4f4038);
+    M.a.color.setHex(0x9f735c);M.b.color.setHex(0x86705f);M.c.color.setHex(0x8d6258);M.roof.color.setHex(0x4d3b35);
+    M.ice.color.setHex(0x4f7f8f);M.ice.emissive.setHex(0x1d3440);M.ice.emissiveIntensity=.12;
+    moon.material.color.setHex(0xffc06c);moon.position.set(-20,13,-35);moon.scale.setScalar(1.35);
+    moonLight.color.setHex(0xffb879);moonLight.intensity=1.9;
+    flakes.material.color.setHex(0xc96a3a);flakes.material.size=.075;flakes.material.opacity=.48;
+
+    resetCoins("autumn");
+    worldName.textContent="Autumn";
+    resetPlayer();
+    playSeasonMusic(makeAutumnMusic());
+    setSeasonTitle("Autumn");
+
+    worldFade.classList.remove("show");
+    transitioning=false;
+  },780);
+}
 
 function audio(){
   if(requested){if(loaded&&!music.isPlaying)music.play();return}
@@ -446,14 +643,22 @@ let foundAt=0;
 function mood(t){
   const d=camera.position.distanceTo(C.source);
 
-  if(world==="spring"){
-    warm.intensity=2.3+Math.sin(t*1.7)*.18;
-    orb.scale.setScalar(.92+Math.sin(t*1.8)*.04);
-    return;
-  }
+  if(world==="winter"){
+    const near=THREE.MathUtils.clamp(1-d/42,0,1);
+    if(loaded)low.frequency.setTargetAtTime(done?16000:THREE.MathUtils.lerp(650,12000,near*near),listener.context.currentTime,.12);
 
-  const near=THREE.MathUtils.clamp(1-d/42,0,1);
-  if(loaded)low.frequency.setTargetAtTime(done?16000:THREE.MathUtils.lerp(650,12000,near*near),listener.context.currentTime,.12);
+    if(!done&&d<C.radius){
+      done=true;
+      foundAt=t;
+      found.classList.add("show");
+      M.ice.emissive.setHex(0x24424d);
+      M.ice.emissiveIntensity=.55;
+      if(loaded){music.setRefDistance(14);music.setRolloffFactor(.55);music.setVolume(1)}
+      setTimeout(()=>found.classList.remove("show"),6200);
+    }
+
+    if(done&&!portalActive&&t-foundAt<5)scene.fog.color.lerp(new THREE.Color(0x1a2940),.01);
+  }
 
   if(portalActive){
     warm.intensity=5.2+Math.sin(t*3.0)*.9;
@@ -461,34 +666,38 @@ function mood(t){
     portalDisk.material.opacity=.3+.12*Math.sin(t*2.6);
     portalRing.material.opacity=.7+.22*Math.sin(t*3.2);
     portalGroup.scale.setScalar(1+.035*Math.sin(t*2.2));
-    if(d<2.15)enterSpring();
+
+    if(d<2.15){
+      if(world==="winter")enterSpring();
+      else if(world==="spring")enterSummer();
+      else if(world==="summer")enterAutumn();
+    }
   }else{
-    warm.intensity=done?4.6+Math.sin(t*2.2)*.5:1.25+near*2.1;
+    const base=world==="winter"?(done?4.6:1.65):2.3;
+    warm.intensity=base+Math.sin(t*1.8)*.18;
   }
 
-  orb.scale.setScalar(done?1.45+Math.sin(t*2.6)*.1:.85+near*.7);
-
-  if(!done&&d<C.radius){
-    done=true;
-    foundAt=t;
-    found.classList.add("show");
-    M.ice.emissive.setHex(0x24424d);
-    M.ice.emissiveIntensity=.55;
-    if(loaded){music.setRefDistance(14);music.setRolloffFactor(.55);music.setVolume(1)}
-    setTimeout(()=>found.classList.remove("show"),6200);
-  }
-
-  if(done&&!portalActive&&t-foundAt<5)scene.fog.color.lerp(new THREE.Color(0x1a2940),.01);
+  orb.scale.setScalar((portalActive?1.25:.92)+Math.sin(t*1.8)*.04);
 }
 
 const clock=new THREE.Clock();
 function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.05),t=clock.elapsedTime;move(dt);
 const gust=.72+.28*(.5+.5*Math.sin(t*.19));
-const p=flakes.geometry.attributes.position.array,b=(world==="spring"?.34:(done?1.75:1))*gust;
+const particleFactor=world==="winter"?(done?1.75:1):(world==="spring"?.34:(world==="summer"?.12:.48));
+const p=flakes.geometry.attributes.position.array,b=particleFactor*gust;
 for(let i=0;i<C.snow;i++){const k=i*3;p[k+1]-=C.snowSpeed*ss[i]*dt*b;p[k]+=Math.sin(t*.7+i*.31)*.018*b+p[k+1]*0;p[k+2]+=Math.cos(t*.43+i*.19)*.009*b;if(p[k+1]<.15){p[k+1]=THREE.MathUtils.randFloat(17,25);p[k]=THREE.MathUtils.randFloatSpread(65);p[k+2]=THREE.MathUtils.randFloatSpread(65)}}
 flakes.geometry.attributes.position.needsUpdate=true;
-for(let i=0;i<lamps.length;i++){const q=lamps[i],f=.94+.06*Math.sin(t*3.1+q.phase)+.025*Math.sin(t*7.7+q.phase*.7);q.light.intensity=1.05*f;q.bulb.material.opacity=.86+.08*f}
+for(let i=0;i<lamps.length;i++){const q=lamps[i],f=.94+.06*Math.sin(t*3.1+q.phase)+.025*Math.sin(t*7.7+q.phase*.7);const baseLamp=world==="winter"?1.15:(world==="autumn"?1.35:.9);q.light.intensity=baseLamp*f;q.bulb.material.opacity=.86+.08*f}
 if(world==="winter"&&!done)M.ice.emissiveIntensity=.11+.035*Math.sin(t*.55);
+if(world==="summer"&&summerDecor.visible){
+  for(const child of summerDecor.children){
+    if(child.userData&&child.userData.phase!==undefined){
+      child.position.y+=Math.sin(t*1.5+child.userData.phase)*.0008;
+      child.material.opacity=.55+.35*Math.sin(t*2.1+child.userData.phase);
+      child.material.transparent=true;
+    }
+  }
+}
 for(const coin of coins){
   if(coin.userData.collected)continue;
   coin.rotation.y=t*1.5+coin.userData.phase;
