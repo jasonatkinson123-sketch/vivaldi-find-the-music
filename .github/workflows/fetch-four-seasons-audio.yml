@@ -27,7 +27,7 @@ jobs:
         run: |
           mkdir -p assets/audio/four-seasons source-audio
           python3 - <<'PY'
-          import os, urllib.parse, urllib.request
+          import os, time, urllib.parse, urllib.request, urllib.error
 
           files = [
               ("The Modena Chamber Orchestra - Vivaldi's Spring, RV 269 - I. Allegro.ogg", "spring-1-allegro"),
@@ -46,12 +46,23 @@ jobs:
 
           opener = urllib.request.build_opener()
           opener.addheaders = [("User-Agent", "Vivaldi-Find-the-Music/1.0 (educational game)")]
-          for filename, shortname in files:
+          for index, (filename, shortname) in enumerate(files):
               url = "https://commons.wikimedia.org/wiki/Special:Redirect/file/" + urllib.parse.quote(filename, safe="")
               dest = os.path.join("source-audio", shortname + ".ogg")
               print("Downloading", filename)
-              with opener.open(url, timeout=90) as response, open(dest, "wb") as out:
-                  out.write(response.read())
+              for attempt in range(5):
+                  try:
+                      with opener.open(url, timeout=120) as response, open(dest, "wb") as out:
+                          out.write(response.read())
+                      break
+                  except urllib.error.HTTPError as exc:
+                      if exc.code != 429 or attempt == 4:
+                          raise
+                      delay = 15 * (attempt + 1)
+                      print(f"Rate limited; retrying in {delay}s")
+                      time.sleep(delay)
+              if index < len(files) - 1:
+                  time.sleep(4)
           PY
 
           for src in source-audio/*.ogg; do
