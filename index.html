@@ -25,6 +25,8 @@ button{appearance:none;background:transparent;border:1px solid #444;color:#eee;p
 #hitFlash{position:fixed;inset:0;z-index:18;pointer-events:none;background:#fff;opacity:0;transition:opacity .22s ease}#hitFlash.show{opacity:.34}
 #worldFade{position:fixed;inset:0;z-index:19;background:#000;opacity:0;pointer-events:none;transition:opacity .75s ease}
 #worldFade.show{opacity:1}
+#boatExit{position:fixed;right:18px;top:18px;z-index:17;display:none;background:#12131acc;border:1px solid #ffffff55;color:#fff;padding:11px 14px;font-size:10px;letter-spacing:.18em;backdrop-filter:blur(6px)}
+body.boating #boatExit{display:block}
 #vig{position:fixed;inset:0;z-index:6;pointer-events:none;background:radial-gradient(circle at center,transparent 48%,#0001 72%,#0008 130%)}
 </style>
 </head>
@@ -38,6 +40,7 @@ button{appearance:none;background:transparent;border:1px solid #444;color:#eee;p
 <div id="factCard"><div class="kicker"></div><div class="fact"></div></div>
 <div id="hitFlash"></div>
 <div id="worldFade"></div>
+<button id="boatExit">Dock / Exit</button>
 <div id="touch"><div id="moveZone" class="zone left"></div><div id="lookZone" class="zone right"></div><div id="base"><div id="knob"></div></div><div id="hint">LEFT — MOVE &nbsp;&nbsp; RIGHT — LOOK</div></div>
 <div id="vig"></div>
 
@@ -49,7 +52,7 @@ const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0d1b2d); scene
 const camera=new THREE.PerspectiveCamera(68,innerWidth/innerHeight,.1,120); camera.position.set(-23,1.7,22); camera.rotation.order="YXZ";
 const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); renderer.setSize(innerWidth,innerHeight); renderer.outputColorSpace=THREE.SRGBColorSpace; document.body.prepend(renderer.domElement);
 
-const veil=document.querySelector("#veil"),enter=document.querySelector("#enter"),info=document.querySelector("#info"),pause=document.querySelector("#pause"),resume=document.querySelector("#resume"),found=document.querySelector("#found"),moveZone=document.querySelector("#moveZone"),lookZone=document.querySelector("#lookZone"),base=document.querySelector("#base"),knob=document.querySelector("#knob"),hud=document.querySelector("#hud"),worldName=document.querySelector("#worldName"),coinCount=document.querySelector("#coinCount"),keyLine=document.querySelector("#keyLine"),collectFlash=document.querySelector("#collectFlash"),factCard=document.querySelector("#factCard"),factKicker=factCard.querySelector(".kicker"),factText=factCard.querySelector(".fact"),hitFlash=document.querySelector("#hitFlash"),worldFade=document.querySelector("#worldFade");
+const veil=document.querySelector("#veil"),enter=document.querySelector("#enter"),info=document.querySelector("#info"),pause=document.querySelector("#pause"),resume=document.querySelector("#resume"),found=document.querySelector("#found"),moveZone=document.querySelector("#moveZone"),lookZone=document.querySelector("#lookZone"),base=document.querySelector("#base"),knob=document.querySelector("#knob"),hud=document.querySelector("#hud"),worldName=document.querySelector("#worldName"),coinCount=document.querySelector("#coinCount"),keyLine=document.querySelector("#keyLine"),collectFlash=document.querySelector("#collectFlash"),factCard=document.querySelector("#factCard"),factKicker=factCard.querySelector(".kicker"),factText=factCard.querySelector(".fact"),hitFlash=document.querySelector("#hitFlash"),worldFade=document.querySelector("#worldFade"),boatExit=document.querySelector("#boatExit");
 const mobile=matchMedia("(pointer:coarse)").matches||("ontouchstart"in window); if(mobile){document.body.classList.add("mobile");enter.textContent="Tap to Enter"}
 let started=false,done=false,yaw=0,pitch=-.03,mx=0,my=0,moveId=null,lookId=null,ox=0,oy=0,lx=0,ly=0,collected=0,transitioning=false,world="winter",gameComplete=false,collectionSerial=0,enemyHitUntil=0,hasKey=false,shopReady=false,interactionLock=0,boating=false,boatHasLeftDock=false,boatCooldown=0,boatYaw=-Math.PI/2;
 
@@ -1083,6 +1086,7 @@ const boatForward=new THREE.Vector3();
 
 function resetBoat(){
   boating=false;
+  document.body.classList.remove("boating");
   boatHasLeftDock=false;
   boatYaw=-Math.PI/2;
   gondola.position.copy(boatHome);
@@ -1092,20 +1096,22 @@ function resetBoat(){
 function boardBoat(){
   if(boating||transitioning||gameComplete||performance.now()<boatCooldown)return;
   boating=true;
+  document.body.classList.add("boating");
   boatHasLeftDock=false;
   boatCooldown=performance.now()+1200;
   yaw=boatYaw;
   pitch=-.04;
   camera.rotation.set(pitch,yaw,0);
   info.innerHTML=mobile
-    ?"GONDOLA RIDE · LEFT — SAIL · RIGHT — LOOK<br>RETURN TO THE DOCK TO STEP ASHORE"
-    :"GONDOLA RIDE · W/S — MOVE · A/D — STEER<br>RETURN TO THE DOCK TO STEP ASHORE";
+    ?"GONDOLA RIDE · LEFT — SAIL · RIGHT — LOOK<br>TAP DOCK / EXIT ANY TIME"
+    :"GONDOLA RIDE · W/S — MOVE · A/D — STEER<br>PRESS E OR SPACE TO DOCK / EXIT";
   info.classList.add("show");
   setTimeout(()=>info.classList.remove("show"),3400);
 }
 
 function leaveBoat(){
   boating=false;
+  document.body.classList.remove("boating");
   boatHasLeftDock=false;
   boatCooldown=performance.now()+1800;
   camera.position.set(9.25,1.7,8.0);
@@ -1116,6 +1122,20 @@ function leaveBoat(){
   collectFlash.classList.add("show");
   setTimeout(()=>collectFlash.classList.remove("show"),700);
 }
+
+function dockAndExit(){
+  if(!boating||transitioning)return;
+  gondola.position.copy(boatHome);
+  boatYaw=-Math.PI/2;
+  gondola.rotation.y=boatYaw;
+  leaveBoat();
+}
+
+boatExit.addEventListener("click",e=>{
+  e.preventDefault();
+  e.stopPropagation();
+  dockAndExit();
+});
 
 function updateBoat(dt,t){
   if(!started||transitioning||gameComplete)return;
@@ -1155,11 +1175,8 @@ function updateBoat(dt,t){
   const behindX=-boatForward.x*.72,behindZ=-boatForward.z*.72;
   camera.position.set(gondola.position.x+behindX,1.52,gondola.position.z+behindZ);
 
-  if(boatHasLeftDock&&Math.hypot(gondola.position.x-boatHome.x,gondola.position.z-boatHome.z)<.82&&Math.abs(throttle)<.3){
-    gondola.position.copy(boatHome);
-    gondola.rotation.y=-Math.PI/2;
-    boatYaw=-Math.PI/2;
-    leaveBoat();
+  if(boatHasLeftDock&&Math.hypot(gondola.position.x-boatHome.x,gondola.position.z-boatHome.z)<1.65){
+    dockAndExit();
   }
 }
 
@@ -1169,7 +1186,14 @@ function begin(){started=true;veil.classList.add("hide");listener.context.resume
 enter.onclick=begin;resume.onclick=()=>{listener.context.resume().catch(()=>{});if(!mobile)lock()};
 document.addEventListener("pointerlockchange",()=>{if(started&&!mobile)pause.classList.toggle("show",document.pointerLockElement!==renderer.domElement)});
 document.addEventListener("mousemove",e=>{if(document.pointerLockElement!==renderer.domElement)return;yaw-=e.movementX*.0019;pitch=THREE.MathUtils.clamp(pitch-e.movementY*.0019,-1.1,1.05);camera.rotation.set(pitch,yaw,0)});
-addEventListener("keydown",e=>keys[e.code]=true);addEventListener("keyup",e=>keys[e.code]=false);
+addEventListener("keydown",e=>{
+  keys[e.code]=true;
+  if(boating&&(e.code==="KeyE"||e.code==="Space")){
+    e.preventDefault();
+    dockAndExit();
+  }
+});
+addEventListener("keyup",e=>keys[e.code]=false);
 
 function stick(x,y){base.style.left=ox+"px";base.style.top=oy+"px";base.style.opacity=1;knob.style.transform=`translate(calc(-50% + ${x*30}px),calc(-50% + ${y*30}px))`}
 moveZone.addEventListener("touchstart",e=>{if(!started||moveId!==null)return;const t=e.changedTouches[0];moveId=t.identifier;ox=t.clientX;oy=t.clientY;mx=my=0;stick(0,0);e.preventDefault()},{passive:false});
