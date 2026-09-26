@@ -84,8 +84,82 @@ const sp=new Float32Array(C.snow*3),ss=new Float32Array(C.snow);for(let i=0;i<C.
 const sg=new THREE.BufferGeometry();sg.setAttribute("position",new THREE.BufferAttribute(sp,3));const flakes=new THREE.Points(sg,new THREE.PointsMaterial({color:0xe8f1ff,size:.09,transparent:true,opacity:.72,depthWrite:false}));scene.add(flakes);
 
 const listener=new THREE.AudioListener();camera.add(listener);const music=new THREE.PositionalAudio(listener);shrine.add(music);music.setRefDistance(4.2);music.setMaxDistance(80);music.setRolloffFactor(1.35);music.setDistanceModel("inverse");music.setLoop(true);music.setVolume(.95);
-const low=listener.context.createBiquadFilter();low.type="lowpass";low.frequency.value=1100;low.Q.value=.6;music.setFilter(low);let loaded=false,requested=false;
-function audio(){if(requested){if(loaded&&!music.isPlaying)music.play();return}requested=true;new THREE.AudioLoader().load("winter.mp3",b=>{music.setBuffer(b);loaded=true;music.play()},undefined,()=>console.warn("winter.mp3 missing; scene will run silently"))}
+const low=listener.context.createBiquadFilter();low.type="lowpass";low.frequency.value=1100;low.Q.value=.6;music.setFilter(low);let loaded=false,requested=false,usingPrototype=false;
+
+function makePrototypeMusic(){
+  const ctx=listener.context,sr=ctx.sampleRate,step=.29;
+  const chords=[
+    [293.66,349.23,440.00,587.33],
+    [233.08,293.66,349.23,466.16],
+    [261.63,329.63,392.00,523.25],
+    [220.00,277.18,329.63,440.00]
+  ];
+  const pattern=[0,1,2,3,2,1,2,3];
+  const total=chords.length*pattern.length*step;
+  const buf=ctx.createBuffer(1,Math.floor(total*sr),sr);
+  const data=buf.getChannelData(0);
+
+  function addTone(freq,start,dur,amp){
+    const a=Math.floor(start*sr),b=Math.min(data.length,Math.floor((start+dur)*sr));
+    for(let i=a;i<b;i++){
+      const t=(i-a)/sr;
+      const attack=Math.min(1,t/.018);
+      const decay=Math.exp(-3.1*t/dur);
+      const env=attack*decay;
+      const ph=2*Math.PI*freq*t;
+      data[i]+=amp*env*(Math.sin(ph)+.22*Math.sin(ph*2)+.08*Math.sin(ph*3));
+    }
+  }
+
+  let n=0;
+  for(let c=0;c<chords.length;c++){
+    const chord=chords[c];
+    for(let s=0;s<pattern.length;s++,n++){
+      const start=n*step;
+      addTone(chord[pattern[s]],start,step*.92,.17);
+      if(s===0||s===4) addTone(chord[0]/2,start,step*1.8,.11);
+    }
+  }
+
+  let peak=.001;
+  for(let i=0;i<data.length;i++) peak=Math.max(peak,Math.abs(data[i]));
+  const gain=.72/peak;
+  for(let i=0;i<data.length;i++) data[i]*=gain;
+  return buf;
+}
+
+function startPrototypeMusic(){
+  if(music.isPlaying) music.stop();
+  music.setBuffer(makePrototypeMusic());
+  music.setLoop(true);
+  music.setVolume(.95);
+  loaded=true;
+  usingPrototype=true;
+  music.play();
+  console.info("Using built-in prototype music. Add winter.mp3 later for the real recording.");
+}
+
+function audio(){
+  if(requested){if(loaded&&!music.isPlaying)music.play();return}
+  requested=true;
+
+  // Try the real file first. If it is not present, immediately fall back
+  // to a tiny synthesized baroque-style loop so the navigation mechanic works.
+  new THREE.AudioLoader().load(
+    "winter.mp3",
+    b=>{
+      if(music.isPlaying) music.stop();
+      music.setBuffer(b);
+      music.setLoop(true);
+      music.setVolume(.95);
+      loaded=true;
+      usingPrototype=false;
+      music.play();
+    },
+    undefined,
+    ()=>startPrototypeMusic()
+  );
+}
 
 const keys={},rad=.38,fwd=new THREE.Vector3(),right=new THREE.Vector3();
 function lock(){renderer.domElement.requestPointerLock?.()}
