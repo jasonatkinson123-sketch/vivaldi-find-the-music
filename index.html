@@ -33,7 +33,7 @@ button{appearance:none;background:transparent;border:1px solid #444;color:#eee;p
 <div id="info">WASD — MOVE<br>MOUSE — LOOK</div>
 <div id="pause"><button id="resume">Return to Venice</button></div>
 <div id="found"><div><div class="n">Antonio Vivaldi</div><div class="w">Winter</div><div class="s">The Four Seasons — 1725</div></div></div>
-<div id="hud"><span id="worldName">Winter</span><br><strong><span id="coinCount">0</span> / 6 Zecchini</strong></div>
+<div id="hud"><span id="worldName">Winter</span><br><strong><span id="coinCount">0</span> / 6 Zecchini</strong><br><span id="keyLine">Key: none</span></div>
 <div id="collectFlash"></div>
 <div id="factCard"><div class="kicker"></div><div class="fact"></div></div>
 <div id="hitFlash"></div>
@@ -49,9 +49,9 @@ const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0d1b2d); scene
 const camera=new THREE.PerspectiveCamera(68,innerWidth/innerHeight,.1,120); camera.position.set(-23,1.7,22); camera.rotation.order="YXZ";
 const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); renderer.setSize(innerWidth,innerHeight); renderer.outputColorSpace=THREE.SRGBColorSpace; document.body.prepend(renderer.domElement);
 
-const veil=document.querySelector("#veil"),enter=document.querySelector("#enter"),info=document.querySelector("#info"),pause=document.querySelector("#pause"),resume=document.querySelector("#resume"),found=document.querySelector("#found"),moveZone=document.querySelector("#moveZone"),lookZone=document.querySelector("#lookZone"),base=document.querySelector("#base"),knob=document.querySelector("#knob"),hud=document.querySelector("#hud"),worldName=document.querySelector("#worldName"),coinCount=document.querySelector("#coinCount"),collectFlash=document.querySelector("#collectFlash"),factCard=document.querySelector("#factCard"),factKicker=factCard.querySelector(".kicker"),factText=factCard.querySelector(".fact"),hitFlash=document.querySelector("#hitFlash"),worldFade=document.querySelector("#worldFade");
+const veil=document.querySelector("#veil"),enter=document.querySelector("#enter"),info=document.querySelector("#info"),pause=document.querySelector("#pause"),resume=document.querySelector("#resume"),found=document.querySelector("#found"),moveZone=document.querySelector("#moveZone"),lookZone=document.querySelector("#lookZone"),base=document.querySelector("#base"),knob=document.querySelector("#knob"),hud=document.querySelector("#hud"),worldName=document.querySelector("#worldName"),coinCount=document.querySelector("#coinCount"),keyLine=document.querySelector("#keyLine"),collectFlash=document.querySelector("#collectFlash"),factCard=document.querySelector("#factCard"),factKicker=factCard.querySelector(".kicker"),factText=factCard.querySelector(".fact"),hitFlash=document.querySelector("#hitFlash"),worldFade=document.querySelector("#worldFade");
 const mobile=matchMedia("(pointer:coarse)").matches||("ontouchstart"in window); if(mobile){document.body.classList.add("mobile");enter.textContent="Tap to Enter"}
-let started=false,done=false,yaw=0,pitch=-.03,mx=0,my=0,moveId=null,lookId=null,ox=0,oy=0,lx=0,ly=0,collected=0,portalActive=false,transitioning=false,world="winter",gameComplete=false,collectionSerial=0,enemyHitUntil=0;
+let started=false,done=false,yaw=0,pitch=-.03,mx=0,my=0,moveId=null,lookId=null,ox=0,oy=0,lx=0,ly=0,collected=0,transitioning=false,world="winter",gameComplete=false,collectionSerial=0,enemyHitUntil=0,hasKey=false,shopReady=false,interactionLock=0;
 
 scene.add(new THREE.HemisphereLight(0x9bb7d8,0x29313d,1.42));
 const moonLight=new THREE.DirectionalLight(0xc8dcff,1.95); moonLight.position.set(-18,28,12); scene.add(moonLight);
@@ -99,19 +99,19 @@ const coins=[];
 const seasonCoinPositions={
   winter:[
     [-19,1.05,14],[-16,1.05,0],[-16,1.05,-14],
-    [2,1.05,2],[19,1.05,6],[19,1.05,-15]
+    [-1.2,1.05,2],[19,1.05,6],[19,1.05,-15]
   ],
   spring:[
     [-20,1.05,14],[-16,1.05,-1],[-16,1.05,-13],
-    [2,1.05,2],[19,1.05,5],[19,1.05,-15]
+    [-1.1,1.05,2],[19,1.05,5],[19,1.05,-15]
   ],
   summer:[
     [-18,1.05,15],[-16,1.05,-3],[-16,1.05,-16],
-    [1.5,1.05,2],[19,1.05,7],[19,1.05,-17]
+    [-1.3,1.05,2],[19,1.05,7],[19,1.05,-17]
   ],
   autumn:[
     [-20,1.05,15],[-16,1.05,-5],[-16,1.05,-18],
-    [2.5,1.05,2],[19,1.05,3],[19,1.05,-18]
+    [-1.0,1.05,2],[19,1.05,3],[19,1.05,-18]
   ]
 };
 const coinPositions=seasonCoinPositions.winter;
@@ -244,29 +244,7 @@ function collectCoin(coin){
   }
 
   if(collected===coins.length){
-    if(world==="autumn"){
-      gameComplete=true;
-      enemyRoot.visible=false;
-      collectFlash.textContent="The Four Seasons Complete";
-      collectFlash.classList.add("show");
-      setTimeout(()=>collectFlash.classList.remove("show"),3200);
-      found.querySelector(".n").textContent="Antonio Vivaldi";
-      found.querySelector(".w").textContent="The Four Seasons";
-      found.querySelector(".s").textContent="Venice — 1725";
-      found.classList.add("show");
-      setTimeout(()=>found.classList.remove("show"),6200);
-      return;
-    }
-
-    collectFlash.textContent="Portal Open";
-    collectFlash.classList.add("show");
-    setTimeout(()=>collectFlash.classList.remove("show"),1200);
-    setTimeout(()=>{
-      info.innerHTML="RETURN TO THE ARCH";
-      info.classList.add("show");
-      setTimeout(()=>info.classList.remove("show"),2600);
-    },900);
-    activatePortal();
+    openKeyShop();
   }else{
     collectFlash.textContent="+1 Zecchino";
     collectFlash.classList.add("show");
@@ -288,39 +266,209 @@ const orb=new THREE.Mesh(new THREE.SphereGeometry(.28,10,8),new THREE.MeshBasicM
 
 const warm=new THREE.PointLight(0xff8f4d,2.1,13,1.6);warm.position.set(0,2.2,.4);shrine.add(warm);
 
-// The arch becomes a portal only after all six zecchini are collected.
-const portalGroup=new THREE.Group();
-portalGroup.position.set(0,1.78,.22);
-portalGroup.visible=false;
-shrine.add(portalGroup);
+// KEY SHOP ---------------------------------------------------------------
+function makeLabel(text,bg="#16111d",fg="#f2d48b"){
+  const canvas=document.createElement("canvas");
+  canvas.width=512;canvas.height=160;
+  const x=canvas.getContext("2d");
+  x.fillStyle=bg;x.fillRect(0,0,canvas.width,canvas.height);
+  x.strokeStyle="#c7a660";x.lineWidth=8;x.strokeRect(7,7,canvas.width-14,canvas.height-14);
+  x.fillStyle=fg;x.font="bold 54px Georgia,serif";x.textAlign="center";x.textBaseline="middle";
+  x.fillText(text,canvas.width/2,canvas.height/2+3);
+  const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true}));
+  sprite.scale.set(3.9,1.22,1);
+  return sprite;
+}
 
-const portalDisk=new THREE.Mesh(
-  new THREE.CircleGeometry(1.12,28),
-  new THREE.MeshBasicMaterial({color:0x8cf5d2,transparent:true,opacity:.34,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending})
-);
-portalGroup.add(portalDisk);
+function makeKeyModel(scale=1){
+  const g=new THREE.Group();
+  const mat=new THREE.MeshStandardMaterial({color:0xffd15a,metalness:.82,roughness:.18,emissive:0x724500,emissiveIntensity:.38});
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(.26*scale,.065*scale,7,18),mat);
+  ring.rotation.y=Math.PI/2;g.add(ring);
+  const shaft=new THREE.Mesh(new THREE.BoxGeometry(.72*scale,.10*scale,.10*scale),mat);
+  shaft.position.x=.47*scale;g.add(shaft);
+  const tooth1=new THREE.Mesh(new THREE.BoxGeometry(.12*scale,.24*scale,.10*scale),mat);
+  tooth1.position.set(.77*scale,-.08*scale,0);g.add(tooth1);
+  const tooth2=tooth1.clone();tooth2.position.x=.92*scale;tooth2.scale.y=.72;g.add(tooth2);
+  return g;
+}
 
-const portalRing=new THREE.Mesh(
-  new THREE.TorusGeometry(1.18,.07,8,28),
-  new THREE.MeshBasicMaterial({color:0xe8fff4,transparent:true,opacity:.82,depthWrite:false,blending:THREE.AdditiveBlending})
-);
-portalGroup.add(portalRing);
+const keyShop=new THREE.Group();
+keyShop.position.set(-11,0,17.3);
+scene.add(keyShop);
 
-function activatePortal(){
-  if(portalActive||world==="autumn")return;
-  portalActive=true;
-  portalGroup.visible=true;
+const shopWood=new THREE.MeshStandardMaterial({color:0x563b2d,roughness:.92});
+const shopDark=new THREE.MeshStandardMaterial({color:0x29202a,roughness:.9});
+const shopGold=new THREE.MeshStandardMaterial({color:0xb99046,metalness:.25,roughness:.65});
+const shopBase=new THREE.Mesh(new THREE.BoxGeometry(3.5,.35,2.15),shopWood);shopBase.position.y=.18;keyShop.add(shopBase);
+const shopBack=new THREE.Mesh(new THREE.BoxGeometry(3.3,2.2,.22),shopDark);shopBack.position.set(0,1.35,.92);keyShop.add(shopBack);
+const counter=new THREE.Mesh(new THREE.BoxGeometry(3.25,.78,.62),shopWood);counter.position.set(0,.72,-.42);keyShop.add(counter);
+for(const x of[-1.45,1.45]){
+  const post=new THREE.Mesh(new THREE.BoxGeometry(.14,2.6,.14),shopGold);post.position.set(x,1.45,-.55);keyShop.add(post);
+}
+const awningMat=new THREE.MeshStandardMaterial({color:0x7f2637,roughness:.86});
+const awning=new THREE.Mesh(new THREE.BoxGeometry(3.65,.16,1.18),awningMat);awning.position.set(0,2.7,-.18);awning.rotation.x=-.14;keyShop.add(awning);
+const shopSign=makeLabel("KEY SHOP");shopSign.position.set(0,3.45,.78);keyShop.add(shopSign);
+const shopKey=makeKeyModel(.95);shopKey.position.set(0,2.05,-.72);shopKey.rotation.y=.2;keyShop.add(shopKey);
+const shopGlow=new THREE.PointLight(0xffca69,.7,8,1.7);shopGlow.position.set(0,2.1,-.7);keyShop.add(shopGlow);
 
-  const colors={
-    winter:0x9fffdc,
-    spring:0xffe58c,
-    summer:0xffb36b
-  };
-  const color=colors[world]||0xffffff;
-  warm.color.setHex(color);
-  portalDisk.material.color.setHex(color);
-  portalRing.material.color.setHex(0xffffff);
-  warm.intensity=5.4;
+// DOOR OF SEASONS -------------------------------------------------------
+const seasonDoor=new THREE.Group();
+seasonDoor.position.set(2,0,2.08);
+scene.add(seasonDoor);
+
+const doorStone=new THREE.MeshStandardMaterial({color:0x40394d,roughness:.72,metalness:.08});
+const doorGold=new THREE.MeshStandardMaterial({color:0xc6a15a,roughness:.38,metalness:.55,emissive:0x392100,emissiveIntensity:.22});
+for(const x of[-1.25,1.25]){
+  const col=new THREE.Mesh(new THREE.BoxGeometry(.38,2.9,.52),doorStone);col.position.set(x,1.45,0);seasonDoor.add(col);
+  const trim=new THREE.Mesh(new THREE.BoxGeometry(.10,2.65,.58),doorGold);trim.position.set(x,1.48,-.03);seasonDoor.add(trim);
+}
+const lintel=new THREE.Mesh(new THREE.BoxGeometry(2.9,.40,.58),doorStone);lintel.position.set(0,2.88,0);seasonDoor.add(lintel);
+const crown=new THREE.Mesh(new THREE.TorusGeometry(1.25,.18,8,28,Math.PI),doorGold);crown.position.set(0,2.88,.02);seasonDoor.add(crown);
+const doorInnerMat=new THREE.MeshBasicMaterial({color:0x23314c,transparent:true,opacity:.34,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
+const doorInner=new THREE.Mesh(new THREE.PlaneGeometry(2.18,2.58),doorInnerMat);doorInner.position.set(0,1.46,.10);seasonDoor.add(doorInner);
+const doorKeyhole=new THREE.Group();
+const khTop=new THREE.Mesh(new THREE.CircleGeometry(.12,12),doorGold);khTop.position.set(0,1.52,.18);doorKeyhole.add(khTop);
+const khStem=new THREE.Mesh(new THREE.BoxGeometry(.09,.28,.05),doorGold);khStem.position.set(0,1.32,.18);doorKeyhole.add(khStem);
+seasonDoor.add(doorKeyhole);
+const doorLabel=makeLabel("DOOR OF SEASONS","#15111c","#dcc27b");doorLabel.position.set(0,3.72,.02);doorLabel.scale.multiplyScalar(.82);seasonDoor.add(doorLabel);
+const doorGlow=new THREE.PointLight(0x6f88c9,.5,8,2);doorGlow.position.set(0,1.6,.6);seasonDoor.add(doorGlow);
+
+const doorStars=[];
+for(let i=0;i<13;i++){
+  const star=new THREE.Mesh(
+    new THREE.SphereGeometry(.025+(i%3)*.008,5,4),
+    new THREE.MeshBasicMaterial({color:i%2?0xffe79a:0xb9d8ff,transparent:true,opacity:.3})
+  );
+  star.position.set(-.92+(i%5)*.46,.42+(i%4)*.55,.16);
+  star.userData.phase=i*.73;
+  seasonDoor.add(star);doorStars.push(star);
+}
+
+const seasonDoorColors={
+  winter:0x8bd8ff,
+  spring:0xa7f08c,
+  summer:0xffc85d,
+  autumn:0xe77847
+};
+
+function nextWorldName(){
+  return world==="winter"?"Spring":world==="spring"?"Summer":world==="summer"?"Autumn":"Final";
+}
+
+function resetSeasonKeyState(){
+  hasKey=false;shopReady=false;
+  keyLine.textContent="Key: none";
+  shopGlow.intensity=.55;
+  doorInnerMat.opacity=.26;
+  doorInnerMat.color.setHex(seasonDoorColors[world]||0x8bd8ff);
+  doorGlow.color.setHex(seasonDoorColors[world]||0x8bd8ff);
+  doorGlow.intensity=.45;
+}
+
+function openKeyShop(){
+  shopReady=true;
+  shopGlow.intensity=3.0;
+  collectFlash.textContent="6 Zecchini — Key Shop Open";
+  collectFlash.classList.add("show");
+  setTimeout(()=>collectFlash.classList.remove("show"),1600);
+  setTimeout(()=>{
+    info.innerHTML="FIND THE KEY SHOP · BUY THE "+nextWorldName().toUpperCase()+" KEY";
+    info.classList.add("show");
+    setTimeout(()=>info.classList.remove("show"),3000);
+  },700);
+}
+
+function keyPurchaseChime(){
+  if(!listener||listener.context.state!=="running")return;
+  const ctx=listener.context,now=ctx.currentTime;
+  [392,523.25,659.25,783.99].forEach((freq,i)=>{
+    const o=ctx.createOscillator(),g=ctx.createGain();
+    o.type="triangle";o.frequency.value=freq;
+    g.gain.setValueAtTime(.0001,now+i*.055);
+    g.gain.exponentialRampToValueAtTime(.055,now+.02+i*.055);
+    g.gain.exponentialRampToValueAtTime(.0001,now+.34+i*.055);
+    o.connect(g).connect(ctx.destination);o.start(now+i*.055);o.stop(now+.42+i*.055);
+  });
+}
+
+function buyKey(){
+  if(!shopReady||hasKey||collected<6||transitioning)return;
+  collected=0;coinCount.textContent="0";
+  hasKey=true;shopReady=false;
+  keyLine.textContent="Key: YES";
+  shopGlow.intensity=.7;
+  doorInnerMat.opacity=.78;
+  doorGlow.intensity=3.2;
+  keyPurchaseChime();
+
+  collectFlash.textContent=world==="autumn"?"Final Key Purchased":nextWorldName()+" Key Purchased";
+  collectFlash.classList.add("show");
+  setTimeout(()=>collectFlash.classList.remove("show"),1500);
+  setTimeout(()=>{
+    info.innerHTML="TAKE THE KEY TO THE DOOR OF SEASONS";
+    info.classList.add("show");
+    setTimeout(()=>info.classList.remove("show"),3000);
+  },650);
+}
+
+function completeFourSeasons(){
+  if(gameComplete)return;
+  gameComplete=true;transitioning=true;hasKey=false;
+  enemyRoot.visible=false;
+  keyLine.textContent="Journey complete";
+  doorInnerMat.color.setHex(0xffffff);doorInnerMat.opacity=.95;doorGlow.color.setHex(0xffffff);doorGlow.intensity=5;
+
+  worldFade.classList.add("show");
+  setTimeout(()=>{
+    found.querySelector(".n").textContent="Antonio Vivaldi";
+    found.querySelector(".w").textContent="The Four Seasons";
+    found.querySelector(".s").textContent="Journey Complete · Venice — 1725";
+    found.classList.add("show");
+    worldFade.classList.remove("show");
+    setTimeout(()=>found.classList.remove("show"),7000);
+  },760);
+}
+
+function useSeasonDoor(){
+  if(!hasKey||transitioning||gameComplete)return;
+  hasKey=false;
+  keyLine.textContent="Key: used";
+  if(world==="winter")enterSpring();
+  else if(world==="spring")enterSummer();
+  else if(world==="summer")enterAutumn();
+  else if(world==="autumn")completeFourSeasons();
+}
+
+function updateShopAndDoor(t){
+  if(!started||transitioning||gameComplete)return;
+
+  shopKey.rotation.y=t*1.15;
+  shopKey.position.y=2.05+Math.sin(t*2.0)*.08;
+  const seasonColor=seasonDoorColors[world]||0xffffff;
+  doorInnerMat.color.setHex(seasonColor);
+  for(const s of doorStars){
+    s.material.opacity=(hasKey?.45:.16)+.18*(.5+.5*Math.sin(t*2+s.userData.phase));
+  }
+  doorInnerMat.opacity=hasKey?.68+.12*Math.sin(t*2.2):.24+.035*Math.sin(t*1.4);
+  doorGlow.intensity=hasKey?2.7+.55*Math.sin(t*2.4):.42+.12*Math.sin(t*1.2);
+
+  const now=performance.now();
+  if(now<interactionLock)return;
+
+  const shopDist=Math.hypot(camera.position.x-keyShop.position.x,camera.position.z-keyShop.position.z);
+  if(shopReady&&!hasKey&&shopDist<1.85){
+    interactionLock=now+1600;
+    buyKey();
+    return;
+  }
+
+  const doorDist=Math.hypot(camera.position.x-seasonDoor.position.x,camera.position.z-seasonDoor.position.z);
+  if(hasKey&&doorDist<1.35){
+    interactionLock=now+2000;
+    useSeasonDoor();
+  }
 }
 
 // Venetian mask figures: simple gliding hazards, no combat.
@@ -417,11 +565,10 @@ function enemyBuzz(){
   o.connect(g).connect(ctx.destination);o.start(now);o.stop(now+.24);
 }
 
-function closePortalAfterLoss(){
-  if(!portalActive)return;
-  portalActive=false;
-  portalGroup.visible=false;
-  warm.color.setHex(world==="winter"?0xff8f4d:0xffc47a);
+function closeKeyShopAfterLoss(){
+  if(!shopReady)return;
+  shopReady=false;
+  shopGlow.intensity=.55;
 }
 
 function enemyHit(){
@@ -448,7 +595,7 @@ function enemyHit(){
       stolen.visible=true;
       collected--;
       coinCount.textContent=collected;
-      closePortalAfterLoss();
+      closeKeyShopAfterLoss();
       collectFlash.textContent="A Mask Stole a Zecchino";
     }
   }else{
@@ -512,6 +659,7 @@ function updateEnemies(dt,t){
   }
 }
 
+resetSeasonKeyState();
 configureEnemies("winter");
 
 // Spring scenery is prebuilt but hidden until the portal transition.
@@ -784,7 +932,7 @@ function enterSpring(){
   worldFade.classList.add("show");
 
   setTimeout(()=>{
-    world="spring";portalActive=false;portalGroup.visible=false;
+    world="spring";
     springDecor.visible=true;summerDecor.visible=false;autumnDecor.visible=false;
 
     scene.background.setHex(0x79b6cf);
@@ -798,6 +946,7 @@ function enterSpring(){
     flakes.visible=false;
 
     resetCoins("spring");
+    resetSeasonKeyState();
     configureEnemies("spring");
     worldName.textContent="Spring";
     resetPlayer();
@@ -815,7 +964,7 @@ function enterSummer(){
   worldFade.classList.add("show");
 
   setTimeout(()=>{
-    world="summer";portalActive=false;portalGroup.visible=false;
+    world="summer";
     springDecor.visible=false;summerDecor.visible=true;autumnDecor.visible=false;
 
     scene.background.setHex(0x65a9cf);
@@ -829,6 +978,7 @@ function enterSummer(){
     flakes.visible=false;
 
     resetCoins("summer");
+    resetSeasonKeyState();
     configureEnemies("summer");
     worldName.textContent="Summer";
     resetPlayer();
@@ -846,7 +996,7 @@ function enterAutumn(){
   worldFade.classList.add("show");
 
   setTimeout(()=>{
-    world="autumn";portalActive=false;portalGroup.visible=false;
+    world="autumn";
     springDecor.visible=false;summerDecor.visible=false;autumnDecor.visible=true;
 
     scene.background.setHex(0x8d6954);
@@ -860,6 +1010,7 @@ function enterAutumn(){
     flakes.visible=false;
 
     resetCoins("autumn");
+    resetSeasonKeyState();
     configureEnemies("autumn");
     worldName.textContent="Autumn";
     resetPlayer();
@@ -899,7 +1050,7 @@ function audio(){
 
 const keys={},rad=.38,fwd=new THREE.Vector3(),right=new THREE.Vector3();let walkPhase=0,moveAmount=0;
 function lock(){renderer.domElement.requestPointerLock?.()}
-function begin(){started=true;veil.classList.add("hide");listener.context.resume().then(()=>audio()).catch(()=>audio());if(!mobile)lock();hud.classList.add("show");info.innerHTML=mobile?"COLLECT 6 ZECCHINI · AVOID THE MASKS<br>LEFT — MOVE · RIGHT — LOOK":"COLLECT 6 ZECCHINI · AVOID THE MASKS<br>WASD — MOVE · MOUSE — LOOK";info.classList.add("show");setTimeout(()=>info.classList.remove("show"),3600)}
+function begin(){started=true;veil.classList.add("hide");listener.context.resume().then(()=>audio()).catch(()=>audio());if(!mobile)lock();hud.classList.add("show");info.innerHTML=mobile?"6 ZECCHINI → KEY SHOP → DOOR · AVOID THE MASKS<br>LEFT — MOVE · RIGHT — LOOK":"6 ZECCHINI → KEY SHOP → DOOR · AVOID THE MASKS<br>WASD — MOVE · MOUSE — LOOK";info.classList.add("show");setTimeout(()=>info.classList.remove("show"),3600)}
 enter.onclick=begin;resume.onclick=()=>{listener.context.resume().catch(()=>{});if(!mobile)lock()};
 document.addEventListener("pointerlockchange",()=>{if(started&&!mobile)pause.classList.toggle("show",document.pointerLockElement!==renderer.domElement)});
 document.addEventListener("mousemove",e=>{if(document.pointerLockElement!==renderer.domElement)return;yaw-=e.movementX*.0019;pitch=THREE.MathUtils.clamp(pitch-e.movementY*.0019,-1.1,1.05);camera.rotation.set(pitch,yaw,0)});
@@ -934,27 +1085,12 @@ function mood(t){
       setTimeout(()=>found.classList.remove("show"),6200);
     }
 
-    if(done&&!portalActive&&t-foundAt<5)scene.fog.color.lerp(new THREE.Color(0x1a2940),.01);
+    if(done&&t-foundAt<5)scene.fog.color.lerp(new THREE.Color(0x1a2940),.01);
   }
 
-  if(portalActive){
-    warm.intensity=5.2+Math.sin(t*3.0)*.9;
-    portalGroup.rotation.z=Math.sin(t*.8)*.06;
-    portalDisk.material.opacity=.3+.12*Math.sin(t*2.6);
-    portalRing.material.opacity=.7+.22*Math.sin(t*3.2);
-    portalGroup.scale.setScalar(1+.035*Math.sin(t*2.2));
-
-    if(d<2.15){
-      if(world==="winter")enterSpring();
-      else if(world==="spring")enterSummer();
-      else if(world==="summer")enterAutumn();
-    }
-  }else{
-    const base=world==="winter"?(done?4.6:1.65):2.3;
-    warm.intensity=base+Math.sin(t*1.8)*.18;
-  }
-
-  orb.scale.setScalar((portalActive?1.25:.92)+Math.sin(t*1.8)*.04);
+  const base=world==="winter"?(done?4.4:1.65):2.15;
+  warm.intensity=base+Math.sin(t*1.8)*.18;
+  orb.scale.setScalar(.92+Math.sin(t*1.8)*.04);
 }
 
 const clock=new THREE.Clock();
@@ -983,7 +1119,7 @@ for(const coin of coins){
   coin.position.y=coin.userData.baseY+Math.sin(t*2.1+coin.userData.phase)*.12;
   if(camera.position.distanceTo(coin.position)<1.15) collectCoin(coin);
 }
-updateEnemies(dt,t);mood(t);violin.rotation.y=Math.sin(t*.5)*.03;renderer.render(scene,camera)}
+updateShopAndDoor(t);updateEnemies(dt,t);mood(t);violin.rotation.y=Math.sin(t*.5)*.03;renderer.render(scene,camera)}
 animate();
 addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5))});
 </script>
