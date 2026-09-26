@@ -25,8 +25,13 @@ button{appearance:none;background:transparent;border:1px solid #444;color:#eee;p
 #hitFlash{position:fixed;inset:0;z-index:18;pointer-events:none;background:#fff;opacity:0;transition:opacity .22s ease}#hitFlash.show{opacity:.34}
 #worldFade{position:fixed;inset:0;z-index:19;background:#000;opacity:0;pointer-events:none;transition:opacity .75s ease}
 #worldFade.show{opacity:1}
-#boatExit{position:fixed;right:18px;top:18px;z-index:17;display:none;background:#12131acc;border:1px solid #ffffff55;color:#fff;padding:11px 14px;font-size:10px;letter-spacing:.18em;backdrop-filter:blur(6px)}
+#boatExit,#shopExit{position:fixed;right:18px;top:18px;z-index:17;display:none;background:#12131acc;border:1px solid #ffffff55;color:#fff;padding:11px 14px;font-size:10px;letter-spacing:.18em;backdrop-filter:blur(6px)}
 body.boating #boatExit{display:block}
+body.inshop #shopExit{display:block}
+#dialogueCard{position:fixed;left:50%;bottom:24px;z-index:18;width:min(600px,calc(100vw - 32px));transform:translateX(-50%) translateY(16px);padding:14px 16px 15px;background:#0b0d12e8;border:1px solid #ffffff38;box-shadow:0 10px 36px #0008;backdrop-filter:blur(8px);opacity:0;transition:opacity .22s,transform .22s;pointer-events:none}
+#dialogueCard.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#dialogueCard .speaker{font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:#e8c879;margin-bottom:6px}
+#dialogueCard .line{font:16px/1.35 Georgia,serif;color:#fffdf5}
 #vig{position:fixed;inset:0;z-index:6;pointer-events:none;background:radial-gradient(circle at center,transparent 48%,#0001 72%,#0008 130%)}
 </style>
 </head>
@@ -41,6 +46,8 @@ body.boating #boatExit{display:block}
 <div id="hitFlash"></div>
 <div id="worldFade"></div>
 <button id="boatExit">Dock / Exit</button>
+<button id="shopExit">Exit Shop</button>
+<div id="dialogueCard"><div class="speaker"></div><div class="line"></div></div>
 <div id="touch"><div id="moveZone" class="zone left"></div><div id="lookZone" class="zone right"></div><div id="base"><div id="knob"></div></div><div id="hint">LEFT — MOVE &nbsp;&nbsp; RIGHT — LOOK</div></div>
 <div id="vig"></div>
 
@@ -52,9 +59,9 @@ const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0d1b2d); scene
 const camera=new THREE.PerspectiveCamera(68,innerWidth/innerHeight,.1,120); camera.position.set(-23,1.7,22); camera.rotation.order="YXZ";
 const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); renderer.setSize(innerWidth,innerHeight); renderer.outputColorSpace=THREE.SRGBColorSpace; document.body.prepend(renderer.domElement);
 
-const veil=document.querySelector("#veil"),enter=document.querySelector("#enter"),info=document.querySelector("#info"),pause=document.querySelector("#pause"),resume=document.querySelector("#resume"),found=document.querySelector("#found"),moveZone=document.querySelector("#moveZone"),lookZone=document.querySelector("#lookZone"),base=document.querySelector("#base"),knob=document.querySelector("#knob"),hud=document.querySelector("#hud"),worldName=document.querySelector("#worldName"),coinCount=document.querySelector("#coinCount"),keyLine=document.querySelector("#keyLine"),collectFlash=document.querySelector("#collectFlash"),factCard=document.querySelector("#factCard"),factKicker=factCard.querySelector(".kicker"),factText=factCard.querySelector(".fact"),hitFlash=document.querySelector("#hitFlash"),worldFade=document.querySelector("#worldFade"),boatExit=document.querySelector("#boatExit");
+const veil=document.querySelector("#veil"),enter=document.querySelector("#enter"),info=document.querySelector("#info"),pause=document.querySelector("#pause"),resume=document.querySelector("#resume"),found=document.querySelector("#found"),moveZone=document.querySelector("#moveZone"),lookZone=document.querySelector("#lookZone"),base=document.querySelector("#base"),knob=document.querySelector("#knob"),hud=document.querySelector("#hud"),worldName=document.querySelector("#worldName"),coinCount=document.querySelector("#coinCount"),keyLine=document.querySelector("#keyLine"),collectFlash=document.querySelector("#collectFlash"),factCard=document.querySelector("#factCard"),factKicker=factCard.querySelector(".kicker"),factText=factCard.querySelector(".fact"),hitFlash=document.querySelector("#hitFlash"),worldFade=document.querySelector("#worldFade"),boatExit=document.querySelector("#boatExit"),shopExit=document.querySelector("#shopExit"),dialogueCard=document.querySelector("#dialogueCard"),dialogueSpeaker=dialogueCard.querySelector(".speaker"),dialogueLine=dialogueCard.querySelector(".line");
 const mobile=matchMedia("(pointer:coarse)").matches||("ontouchstart"in window); if(mobile){document.body.classList.add("mobile");enter.textContent="Tap to Enter"}
-let started=false,done=false,yaw=0,pitch=-.03,mx=0,my=0,moveId=null,lookId=null,ox=0,oy=0,lx=0,ly=0,collected=0,transitioning=false,world="winter",gameComplete=false,collectionSerial=0,enemyHitUntil=0,hasKey=false,shopReady=false,interactionLock=0,boating=false,boatHasLeftDock=false,boatCooldown=0,boatYaw=-Math.PI/2;
+let started=false,done=false,yaw=0,pitch=-.03,mx=0,my=0,moveId=null,lookId=null,ox=0,oy=0,lx=0,ly=0,collected=0,transitioning=false,world="winter",gameComplete=false,collectionSerial=0,enemyHitUntil=0,hasKey=false,shopReady=false,interactionLock=0,boating=false,boatHasLeftDock=false,boatCooldown=0,boatYaw=-Math.PI/2,inShop=false,currentShop=null,shopReturn=null,shopCooldown=0,shopConversationPlayed=false,dialogueTimer=null;
 
 scene.add(new THREE.HemisphereLight(0x9bb7d8,0x29313d,1.42));
 const moonLight=new THREE.DirectionalLight(0xc8dcff,1.95); moonLight.position.set(-18,28,12); scene.add(moonLight);
@@ -472,7 +479,7 @@ function useSeasonDoor(){
 }
 
 function updateShopAndDoor(t){
-  if(!started||transitioning||gameComplete)return;
+  if(!started||transitioning||gameComplete||inShop)return;
 
   shopKey.rotation.y=t*1.15;
   shopKey.position.y=2.05+Math.sin(t*2.0)*.08;
@@ -488,9 +495,11 @@ function updateShopAndDoor(t){
   if(now<interactionLock)return;
 
   const shopDist=Math.hypot(camera.position.x-keyShop.position.x,camera.position.z-keyShop.position.z);
-  if(shopReady&&!hasKey&&shopDist<1.85){
+  if(shopReady&&!hasKey&&shopDist<1.85&&now>shopCooldown){
     interactionLock=now+1600;
-    buyKey();
+    enterShop(keyShopConfigs[world],{
+      x:-10.4,z:19.1,yaw:Math.PI
+    });
     return;
   }
 
@@ -500,6 +509,322 @@ function updateShopAndDoor(t){
     useSeasonDoor();
   }
 }
+
+// ENTERABLE SHOPS --------------------------------------------------------
+const shopInterior=new THREE.Group();
+shopInterior.position.set(80,0,0);
+scene.add(shopInterior);
+
+const roomFloor=new THREE.Mesh(
+  new THREE.PlaneGeometry(8,10),
+  new THREE.MeshStandardMaterial({color:0x46382e,roughness:.96})
+);
+roomFloor.rotation.x=-Math.PI/2;roomFloor.position.y=0;shopInterior.add(roomFloor);
+
+const roomWallMat=new THREE.MeshStandardMaterial({color:0x6b574b,roughness:.94});
+const roomTrimMat=new THREE.MeshStandardMaterial({color:0x2b2120,roughness:.9});
+const backWall=new THREE.Mesh(new THREE.BoxGeometry(8,4.5,.25),roomWallMat);backWall.position.set(0,2.25,-5);shopInterior.add(backWall);
+const leftWall=new THREE.Mesh(new THREE.BoxGeometry(.25,4.5,10),roomWallMat);leftWall.position.set(-4,2.25,0);shopInterior.add(leftWall);
+const rightWall=new THREE.Mesh(new THREE.BoxGeometry(.25,4.5,10),roomWallMat);rightWall.position.set(4,2.25,0);shopInterior.add(rightWall);
+const ceiling=new THREE.Mesh(new THREE.BoxGeometry(8,.18,10),roomTrimMat);ceiling.position.set(0,4.45,0);shopInterior.add(ceiling);
+
+const interiorDoor=new THREE.Group();interiorDoor.position.set(0,0,4.83);shopInterior.add(interiorDoor);
+const intDoorMat=new THREE.MeshStandardMaterial({color:0x20191d,roughness:.85});
+const intDoor=new THREE.Mesh(new THREE.BoxGeometry(1.7,2.9,.18),intDoorMat);intDoor.position.y=1.45;interiorDoor.add(intDoor);
+const intDoorGlow=new THREE.PointLight(0xffca7a,.9,6,1.8);intDoorGlow.position.set(0,1.8,-.3);interiorDoor.add(intDoorGlow);
+const exitLabel=makeLabel("EXIT","#171218","#ead5a2");exitLabel.position.set(0,3.35,-.1);exitLabel.scale.multiplyScalar(.55);interiorDoor.add(exitLabel);
+
+const interiorCounter=new THREE.Mesh(
+  new THREE.BoxGeometry(4.8,1.15,1.0),
+  new THREE.MeshStandardMaterial({color:0x5b3d2b,roughness:.9})
+);
+interiorCounter.position.set(0,.58,-1.95);shopInterior.add(interiorCounter);
+
+const shelf1=new THREE.Mesh(new THREE.BoxGeometry(5.4,.12,.42),roomTrimMat);shelf1.position.set(0,2.05,-4.72);shopInterior.add(shelf1);
+const shelf2=shelf1.clone();shelf2.position.y=3.0;shopInterior.add(shelf2);
+
+const keeper=new THREE.Group();keeper.position.set(0,0,-3.2);shopInterior.add(keeper);
+const keeperBody=new THREE.Mesh(
+  new THREE.ConeGeometry(.55,1.5,7),
+  new THREE.MeshStandardMaterial({color:0x5c3340,roughness:.88})
+);
+keeperBody.position.y=.76;keeper.add(keeperBody);
+const keeperHead=new THREE.Mesh(
+  new THREE.SphereGeometry(.28,10,8),
+  new THREE.MeshStandardMaterial({color:0xd7a77f,roughness:.86})
+);
+keeperHead.position.y=1.7;keeper.add(keeperHead);
+const keeperCap=new THREE.Mesh(
+  new THREE.CylinderGeometry(.31,.36,.18,8),
+  new THREE.MeshStandardMaterial({color:0x2d2731,roughness:.9})
+);
+keeperCap.position.y=1.96;keeper.add(keeperCap);
+
+const productPedestal=new THREE.Group();productPedestal.position.set(0,1.22,-1.8);shopInterior.add(productPedestal);
+const pedestalMat=new THREE.MeshStandardMaterial({color:0x2b2423,roughness:.88});
+const pedestal=new THREE.Mesh(new THREE.CylinderGeometry(.48,.6,.12,10),pedestalMat);productPedestal.add(pedestal);
+
+let productModel=null;
+let interiorTitle=null;
+const interiorLamp=new THREE.PointLight(0xffd295,2.0,12,1.8);interiorLamp.position.set(0,3.6,1);shopInterior.add(interiorLamp);
+const counterGlow=new THREE.PointLight(0xffbe72,.65,6,2);counterGlow.position.set(0,2,-1.3);shopInterior.add(counterGlow);
+
+function clearProduct(){
+  if(productModel){productPedestal.remove(productModel);productModel=null}
+}
+
+function makeShopProduct(type){
+  const g=new THREE.Group();
+  const gold=new THREE.MeshStandardMaterial({color:0xd9ad58,metalness:.45,roughness:.4});
+  const wood=new THREE.MeshStandardMaterial({color:0x8a4f2d,roughness:.72});
+  const pale=new THREE.MeshStandardMaterial({color:0xe7dfd1,roughness:.8});
+  const red=new THREE.MeshStandardMaterial({color:0x8b3342,roughness:.82});
+
+  if(type==="violin"){
+    const a=new THREE.Mesh(new THREE.SphereGeometry(.22,10,7),wood);a.scale.set(.8,1.15,.34);a.position.y=.18;g.add(a);
+    const b=new THREE.Mesh(new THREE.SphereGeometry(.17,10,7),wood);b.scale.set(.8,1,.34);b.position.y=.55;g.add(b);
+    const neck=new THREE.Mesh(new THREE.BoxGeometry(.08,.62,.07),wood);neck.position.y=.98;g.add(neck);
+    g.rotation.z=-.18;g.scale.setScalar(1.55);
+  }else if(type==="mask"){
+    const m=new THREE.Mesh(new THREE.SphereGeometry(.34,12,8),pale);m.scale.set(1,.72,.22);m.rotation.x=.08;g.add(m);
+    for(const x of[-.13,.13]){const e=new THREE.Mesh(new THREE.SphereGeometry(.045,6,4),roomTrimMat);e.position.set(x,.05,.31);g.add(e)}
+    g.scale.setScalar(1.45);
+  }else if(type==="flowers"){
+    for(let i=0;i<7;i++){
+      const stem=new THREE.Mesh(new THREE.CylinderGeometry(.014,.018,.55,5),new THREE.MeshStandardMaterial({color:0x50703f,roughness:.9}));
+      stem.position.set((i-3)*.07,.2,0);stem.rotation.z=(i-3)*.05;g.add(stem);
+      const bloom=new THREE.Mesh(new THREE.DodecahedronGeometry(.09,0),new THREE.MeshStandardMaterial({color:i%2?0xf1b1c6:0xffdb86,roughness:.9}));
+      bloom.position.set((i-3)*.075,.5+Math.abs(i-3)*.015,0);g.add(bloom);
+    }
+  }else if(type==="music"){
+    const book=new THREE.Mesh(new THREE.BoxGeometry(.9,.08,.62),pale);book.rotation.x=-.08;g.add(book);
+    for(let i=0;i<5;i++){const line=new THREE.Mesh(new THREE.BoxGeometry(.55,.012,.012),roomTrimMat);line.position.set(0,.055,-.18+i*.09);g.add(line)}
+  }else if(type==="glass"){
+    const cup=new THREE.Mesh(new THREE.CylinderGeometry(.28,.18,.55,10),new THREE.MeshStandardMaterial({color:0x79c5c9,transparent:true,opacity:.58,roughness:.18,metalness:.05}));
+    cup.position.y=.3;g.add(cup);
+    const stem=new THREE.Mesh(new THREE.CylinderGeometry(.035,.035,.3,8),gold);stem.position.y=-.08;g.add(stem);
+    const foot=new THREE.Mesh(new THREE.CylinderGeometry(.2,.2,.045,10),gold);foot.position.y=-.24;g.add(foot);
+  }else if(type==="spice"){
+    for(let i=0;i<3;i++){
+      const sack=new THREE.Mesh(new THREE.CylinderGeometry(.22,.28,.42,8),new THREE.MeshStandardMaterial({color:0xb58b61,roughness:1}));
+      sack.position.set((i-1)*.42,.2,0);g.add(sack);
+      const top=new THREE.Mesh(new THREE.SphereGeometry(.13,7,5),new THREE.MeshStandardMaterial({color:i===0?0x8b3f28:i===1?0xc1933f:0x5c4b32,roughness:1}));
+      top.position.set((i-1)*.42,.43,0);g.add(top);
+    }
+  }else if(type==="bread"){
+    const loaf=new THREE.Mesh(new THREE.CapsuleGeometry(.26,.65,5,8),new THREE.MeshStandardMaterial({color:0xc98d4c,roughness:.94}));
+    loaf.rotation.z=Math.PI/2;loaf.position.y=.22;g.add(loaf);
+  }else if(type==="cloth"){
+    for(let i=0;i<3;i++){
+      const roll=new THREE.Mesh(new THREE.CylinderGeometry(.16,.16,.82,10),new THREE.MeshStandardMaterial({color:i===0?0x7f2944:i===1?0x335d72:0xb08b3e,roughness:.82}));
+      roll.rotation.z=Math.PI/2;roll.position.set(0,.15+i*.2,(i-1)*.13);g.add(roll);
+    }
+  }else if(type==="key"){
+    const k=makeKeyModel(1.15);k.rotation.z=.12;g.add(k);
+  }
+  return g;
+}
+
+const seasonShopConfigs={
+  winter:[
+    {name:"Instrument Maker",product:"violin",palette:0x75402f,lines:[
+      ["Instrument Maker","Careful with that violin. The wood is thin so it can vibrate."],
+      ["You","So the whole instrument is built to move?"],
+      ["Instrument Maker","Exactly. A small motion of the string can fill a whole room with sound."]
+    ]},
+    {name:"Mask Maker",product:"mask",palette:0x49344f,lines:[
+      ["Mask Maker","This one is for Carnival."],
+      ["You","Why wear a mask?"],
+      ["Mask Maker","For a little while, people can step outside their ordinary identity and become someone else."]
+    ]}
+  ],
+  spring:[
+    {name:"Flower & Herb Seller",product:"flowers",palette:0x647a48,lines:[
+      ["Herb Seller","Smell these leaves. Fresh plants do not stay fresh forever."],
+      ["You","So what do you do with them?"],
+      ["Herb Seller","Dry them. Then their scent and flavor can travel much farther."]
+    ]},
+    {name:"Music & Print Shop",product:"music",palette:0x6e5b45,lines:[
+      ["Music Seller","A page of music can travel farther than the musician who wrote it."],
+      ["You","Because it can be printed?"],
+      ["Music Seller","Right. Once the notes are on paper, players in another city can perform the same piece."]
+    ]}
+  ],
+  summer:[
+    {name:"Glass Shop",product:"glass",palette:0x3e6f75,lines:[
+      ["Glass Seller","Hold it to the light. Venice is famous for glass."],
+      ["You","Was it made here?"],
+      ["Glass Seller","Nearby on Murano. Glassmakers there became famous for beautiful, delicate work."]
+    ]},
+    {name:"Spice Merchant",product:"spice",palette:0x7a5536,lines:[
+      ["Spice Merchant","Pepper, cinnamon, strange seeds — all arriving by ship."],
+      ["You","From far away?"],
+      ["Spice Merchant","Very far. Venice grew rich by trading goods that crossed seas and continents."]
+    ]}
+  ],
+  autumn:[
+    {name:"Bakery",product:"bread",palette:0x8a5d39,lines:[
+      ["Baker","This loaf was already in the oven before most of Venice woke up."],
+      ["You","That early?"],
+      ["Baker","Bread does not wait for sleepy people. Bakers learn to work while the streets are quiet."]
+    ]},
+    {name:"Cloth & Ribbon Shop",product:"cloth",palette:0x664157,lines:[
+      ["Cloth Seller","Silk, ribbon, velvet — color matters as much as the cloth."],
+      ["You","Where does it all come from?"],
+      ["Cloth Seller","Venice is a trading city. Fabrics and dyes arrive from many different places."]
+    ]}
+  ]
+};
+
+const keyShopConfigs={
+  winter:{name:"Key Keeper",product:"key",palette:0x554028,isKeyShop:true,lines:[
+    ["Key Keeper","Six zecchini. Exactly the price of the Spring Key."],
+    ["You","And it opens that strange door?"],
+    ["Key Keeper","Only the Door of Seasons. Keep it close."]
+  ]},
+  spring:{name:"Key Keeper",product:"key",palette:0x5e5432,isKeyShop:true,lines:[
+    ["Key Keeper","Six zecchini for the Summer Key."],
+    ["You","Does the same door open again?"],
+    ["Key Keeper","The door is the same. What waits beyond it is not."]
+  ]},
+  summer:{name:"Key Keeper",product:"key",palette:0x6d432a,isKeyShop:true,lines:[
+    ["Key Keeper","You have enough for the Autumn Key."],
+    ["You","The door changes every time."],
+    ["Key Keeper","Perhaps the door is listening to the season."]
+  ]},
+  autumn:{name:"Key Keeper",product:"key",palette:0x5d382f,isKeyShop:true,lines:[
+    ["Key Keeper","Six zecchini. This is the final key."],
+    ["You","What is behind the door now?"],
+    ["Key Keeper","There is only one way to know."]
+  ]}
+};
+
+function makeStorefront(x,z,rot){
+  const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=rot;scene.add(g);
+  const frameMat=new THREE.MeshStandardMaterial({color:0x33262b,roughness:.9});
+  const doorMat=new THREE.MeshStandardMaterial({color:0x5b4037,roughness:.88});
+  const door=new THREE.Mesh(new THREE.BoxGeometry(1.65,2.65,.16),doorMat);door.position.y=1.33;g.add(door);
+  for(const sx of[-.96,.96]){const p=new THREE.Mesh(new THREE.BoxGeometry(.18,2.95,.25),frameMat);p.position.set(sx,1.48,0);g.add(p)}
+  const lint=new THREE.Mesh(new THREE.BoxGeometry(2.1,.2,.25),frameMat);lint.position.set(0,2.85,0);g.add(lint);
+  const light=new THREE.PointLight(0xffc477,1.05,6,1.8);light.position.set(0,2.35,.5);g.add(light);
+  return {group:g,light,sign:null};
+}
+
+const storefrontA=makeStorefront(-22.15,13.2,Math.PI/2);
+const storefrontB=makeStorefront(22.15,10.5,-Math.PI/2);
+
+function setStoreSign(store,name){
+  if(store.sign)store.group.remove(store.sign);
+  store.sign=makeLabel(name.toUpperCase(),"#171219","#e8cf95");
+  store.sign.position.set(0,3.42,.08);store.sign.scale.multiplyScalar(.56);store.group.add(store.sign);
+}
+
+function updateSeasonShops(season){
+  const pair=seasonShopConfigs[season];
+  setStoreSign(storefrontA,pair[0].name);
+  setStoreSign(storefrontB,pair[1].name);
+  storefrontA.light.color.setHex(pair[0].palette);
+  storefrontB.light.color.setHex(pair[1].palette);
+}
+
+function prepareInterior(config){
+  if(interiorTitle)shopInterior.remove(interiorTitle);
+  interiorTitle=makeLabel(config.name.toUpperCase(),"#171218","#ead5a2");
+  interiorTitle.position.set(0,3.72,-4.82);interiorTitle.scale.multiplyScalar(.72);shopInterior.add(interiorTitle);
+
+  roomWallMat.color.setHex(config.palette||0x6b574b);
+  keeperBody.material.color.setHex(config.isKeyShop?0x4a384e:0x5c3340);
+
+  clearProduct();
+  productModel=makeShopProduct(config.product);
+  productModel.position.set(0,.14,0);
+  productPedestal.add(productModel);
+}
+
+function hideDialogue(){
+  clearTimeout(dialogueTimer);
+  dialogueCard.classList.remove("show");
+}
+
+function playShopConversation(){
+  if(!currentShop||shopConversationPlayed)return;
+  shopConversationPlayed=true;
+
+  if(currentShop.isKeyShop&&!hasKey&&shopReady&&collected>=6){
+    buyKey();
+  }
+
+  let i=0;
+  const showLine=()=>{
+    if(!inShop||!currentShop)return;
+    const pair=currentShop.lines[i];
+    dialogueSpeaker.textContent=pair[0];
+    dialogueLine.textContent=pair[1];
+    dialogueCard.classList.add("show");
+    i++;
+    if(i<currentShop.lines.length){
+      dialogueTimer=setTimeout(showLine,2400);
+    }else{
+      dialogueTimer=setTimeout(()=>dialogueCard.classList.remove("show"),3000);
+    }
+  };
+  showLine();
+}
+
+function enterShop(config,returnPoint){
+  if(inShop||boating||transitioning||gameComplete||performance.now()<shopCooldown)return;
+  currentShop=config;shopReturn=returnPoint;
+  inShop=true;shopConversationPlayed=false;shopCooldown=performance.now()+1400;
+  document.body.classList.add("inshop");
+  prepareInterior(config);
+  camera.position.set(80,1.7,3.55);
+  yaw=0;pitch=-.03;camera.rotation.set(pitch,yaw,0);
+  info.innerHTML="WALK TO THE COUNTER · "+(mobile?"TAP EXIT SHOP TO LEAVE":"E / SPACE TO LEAVE");
+  info.classList.add("show");
+  setTimeout(()=>info.classList.remove("show"),2700);
+}
+
+function exitShop(){
+  if(!inShop||performance.now()<shopCooldown)return;
+  hideDialogue();
+  inShop=false;document.body.classList.remove("inshop");
+  const r=shopReturn||{x:-20,z:14,yaw:0};
+  camera.position.set(r.x,1.7,r.z);
+  yaw=r.yaw||0;pitch=-.03;camera.rotation.set(pitch,yaw,0);
+  currentShop=null;shopReturn=null;shopConversationPlayed=false;
+  shopCooldown=performance.now()+1700;
+}
+
+shopExit.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();if(inShop){shopCooldown=0;exitShop()}});
+
+function updateStorefronts(t){
+  if(!started||transitioning||gameComplete||inShop||boating)return;
+  storefrontA.light.intensity=.85+.25*Math.sin(t*1.7);
+  storefrontB.light.intensity=.85+.25*Math.sin(t*1.9+1.3);
+  if(performance.now()<shopCooldown)return;
+
+  const pair=seasonShopConfigs[world];
+  const dA=Math.hypot(camera.position.x-storefrontA.group.position.x,camera.position.z-storefrontA.group.position.z);
+  if(dA<1.28){
+    enterShop(pair[0],{x:-20.3,z:13.2,yaw:-Math.PI/2});
+    return;
+  }
+  const dB=Math.hypot(camera.position.x-storefrontB.group.position.x,camera.position.z-storefrontB.group.position.z);
+  if(dB<1.28){
+    enterShop(pair[1],{x:20.2,z:10.5,yaw:Math.PI/2});
+  }
+}
+
+function updateInteriorShop(){
+  if(!inShop||!currentShop)return;
+  const dCounter=Math.hypot(camera.position.x-80,camera.position.z-(-.75));
+  if(dCounter<1.75&&!shopConversationPlayed)playShopConversation();
+
+  // Walk back to the interior door to leave naturally.
+  if(camera.position.z>4.18&&performance.now()>shopCooldown)exitShop();
+}
+
+updateSeasonShops("winter");
 
 // Venetian mask figures: simple gliding hazards, no combat.
 const enemyRoot=new THREE.Group();
@@ -640,7 +965,7 @@ function enemyHit(){
 }
 
 function updateEnemies(dt,t){
-  if(!started||transitioning||gameComplete)return;
+  if(!started||transitioning||gameComplete||inShop)return;
 
   for(const e of enemies){
     if(!e.group.visible)continue;
@@ -940,6 +1265,7 @@ function setSeasonTitle(name){
 }
 
 function resetPlayer(){
+  inShop=false;currentShop=null;shopReturn=null;hideDialogue();document.body.classList.remove("inshop");
   camera.position.set(-23,1.7,22);
   yaw=0;pitch=-.03;camera.rotation.set(pitch,yaw,0);
 }
@@ -979,6 +1305,7 @@ function enterSpring(){
     resetCoins("spring");
     resetBoat();
     resetSeasonKeyState();
+    updateSeasonShops("spring");
     configureEnemies("spring");
     worldName.textContent="Spring";
     resetPlayer();
@@ -1012,6 +1339,7 @@ function enterSummer(){
     resetCoins("summer");
     resetBoat();
     resetSeasonKeyState();
+    updateSeasonShops("summer");
     configureEnemies("summer");
     worldName.textContent="Summer";
     resetPlayer();
@@ -1045,6 +1373,7 @@ function enterAutumn(){
     resetCoins("autumn");
     resetBoat();
     resetSeasonKeyState();
+    updateSeasonShops("autumn");
     configureEnemies("autumn");
     worldName.textContent="Autumn";
     resetPlayer();
@@ -1191,6 +1520,10 @@ addEventListener("keydown",e=>{
   if(boating&&(e.code==="KeyE"||e.code==="Space")){
     e.preventDefault();
     dockAndExit();
+  }else if(inShop&&(e.code==="KeyE"||e.code==="Space")){
+    e.preventDefault();
+    shopCooldown=0;
+    exitShop();
   }
 });
 addEventListener("keyup",e=>keys[e.code]=false);
@@ -1203,7 +1536,12 @@ lookZone.addEventListener("touchstart",e=>{if(!started||lookId!==null)return;con
 lookZone.addEventListener("touchmove",e=>{for(const t of e.changedTouches){if(t.identifier!==lookId)continue;const dx=t.clientX-lx,dy=t.clientY-ly;lx=t.clientX;ly=t.clientY;yaw-=dx*.0052;pitch=THREE.MathUtils.clamp(pitch-dy*.0052,-1.1,1.05);camera.rotation.set(pitch,yaw,0)}e.preventDefault()},{passive:false});
 lookZone.addEventListener("touchend",e=>{for(const t of e.changedTouches)if(t.identifier===lookId)lookId=null;e.preventDefault()},{passive:false});lookZone.addEventListener("touchcancel",()=>lookId=null);
 
-function collide(x,z){if(x<-C.bound||x>C.bound||z<-C.bound||z>C.bound)return true;for(const o of obs)if(x+rad>o.x1&&x-rad<o.x2&&z+rad>o.z1&&z-rad<o.z2)return true;return false}
+function collide(x,z){
+  if(inShop){
+    if(x<76.45||x>83.55||z<-1.02||z>4.45)return true;
+    return false;
+  }
+  if(x<-C.bound||x>C.bound||z<-C.bound||z>C.bound)return true;for(const o of obs)if(x+rad>o.x1&&x-rad<o.x2&&z+rad>o.z1&&z-rad<o.z2)return true;return false}
 function move(dt){if(boating){moveAmount=0;return}if(!started||(!mobile&&document.pointerLockElement!==renderer.domElement)){moveAmount=0;return}let x=mobile?mx:((keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0)),z=mobile?my:((keys.KeyS||keys.ArrowDown?1:0)-(keys.KeyW||keys.ArrowUp?1:0));if(Math.abs(x)<.02&&Math.abs(z)<.02){moveAmount+=(0-moveAmount)*Math.min(1,dt*8);camera.position.y=1.7+Math.sin(walkPhase)*.018*moveAmount;return}const n=Math.hypot(x,z);if(n>1){x/=n;z/=n}moveAmount+=(Math.min(1,n)-moveAmount)*Math.min(1,dt*10);walkPhase+=dt*8.2*Math.max(.25,moveAmount);fwd.set(-Math.sin(yaw),0,-Math.cos(yaw));right.set(Math.cos(yaw),0,-Math.sin(yaw));const dx=(right.x*x+fwd.x*-z)*C.speed*dt,dz=(right.z*x+fwd.z*-z)*C.speed*dt;if(!collide(camera.position.x+dx,camera.position.z))camera.position.x+=dx;if(!collide(camera.position.x,camera.position.z+dz))camera.position.z+=dz;camera.position.y=1.7+Math.sin(walkPhase)*.025*moveAmount}
 
 let foundAt=0;
@@ -1258,7 +1596,7 @@ for(const coin of coins){
   coin.position.y=coin.userData.baseY+Math.sin(t*2.1+coin.userData.phase)*.12;
   if(camera.position.distanceTo(coin.position)<1.15) collectCoin(coin);
 }
-updateShopAndDoor(t);updateEnemies(dt,t);mood(t);violin.rotation.y=Math.sin(t*.5)*.03;renderer.render(scene,camera)}
+updateInteriorShop();updateStorefronts(t);updateShopAndDoor(t);updateEnemies(dt,t);mood(t);violin.rotation.y=Math.sin(t*.5)*.03;renderer.render(scene,camera)}
 animate();
 addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5))});
 </script>
