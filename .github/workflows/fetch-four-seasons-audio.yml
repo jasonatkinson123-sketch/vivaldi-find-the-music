@@ -1,0 +1,86 @@
+name: Fetch Four Seasons audio
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/fetch-four-seasons-audio.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fetch-audio:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Ensure ffmpeg is available
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+
+      - name: Download public-domain recordings and make game MP3s
+        run: |
+          mkdir -p assets/audio/four-seasons source-audio
+          python3 - <<'PY'
+          import os, urllib.parse, urllib.request
+
+          files = [
+              ("The Modena Chamber Orchestra - Vivaldi's Spring, RV 269 - I. Allegro.ogg", "spring-1-allegro"),
+              ("The Modena Chamber Orchestra - Vivaldi's Spring, RV 269 - II. Largo.ogg", "spring-2-largo"),
+              ("The Modena Chamber Orchestra - Vivaldi's Spring, RV 269 - III. Allegro.ogg", "spring-3-allegro"),
+              ("The Modena Chamber Orchestra - Vivaldi's Summer, RV 315 - I. Allegro non molto.ogg", "summer-1-allegro-non-molto"),
+              ("The Modena Chamber Orchestra - Vivaldi's Summer, RV 315 - II. Adagio.ogg", "summer-2-adagio"),
+              ("The Modena Chamber Orchestra - Vivaldi's Summer, RV 315 - III. Presto.ogg", "summer-3-presto"),
+              ("The Modena Chamber Orchestra - Vivaldi's Autumn, RV 293 - I. Allegro.ogg", "autumn-1-allegro"),
+              ("The Modena Chamber Orchestra - Vivaldi's Autumn, RV 293 - II. Adagio molto.ogg", "autumn-2-adagio-molto"),
+              ("The Modena Chamber Orchestra - Vivaldi's Autumn, RV 293 - III. Allegro.ogg", "autumn-3-allegro"),
+              ("The Modena Chamber Orchestra - Vivaldi's Winter, RV 297 - I. Allegro non molto.ogg", "winter-1-allegro-non-molto"),
+              ("The Modena Chamber Orchestra - Vivaldi's Winter, RV 297 - II. Largo.ogg", "winter-2-largo"),
+              ("The Modena Chamber Orchestra - Vivaldi's Winter, RV 297 - III. Allegro.ogg", "winter-3-allegro"),
+          ]
+
+          opener = urllib.request.build_opener()
+          opener.addheaders = [("User-Agent", "Vivaldi-Find-the-Music/1.0 (educational game)")]
+          for filename, shortname in files:
+              url = "https://commons.wikimedia.org/wiki/Special:Redirect/file/" + urllib.parse.quote(filename, safe="")
+              dest = os.path.join("source-audio", shortname + ".ogg")
+              print("Downloading", filename)
+              with opener.open(url, timeout=90) as response, open(dest, "wb") as out:
+                  out.write(response.read())
+          PY
+
+          for src in source-audio/*.ogg; do
+            base="$(basename "$src" .ogg)"
+            ffmpeg -hide_banner -loglevel error -y -i "$src" -vn -codec:a libmp3lame -b:a 128k -ar 44100 -ac 2 "assets/audio/four-seasons/$base.mp3"
+          done
+
+          cat > assets/audio/four-seasons/SOURCES.md <<'EOF'
+          # Vivaldi — The Four Seasons audio
+
+          Performance: The Modena Chamber Orchestra  
+          Composer: Antonio Vivaldi  
+          Source: Wikimedia Commons / Musopen  
+          Status: Public Domain Mark 1.0 on the Wikimedia Commons file pages.
+
+          The game MP3 files in this folder were transcoded at 128 kbps from the public-domain Ogg Vorbis source files on Wikimedia Commons.
+
+          Source collection:
+          https://commons.wikimedia.org/wiki/Category:The_Four_Seasons_(Vivaldi)
+          EOF
+
+      - name: Commit audio files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/audio/four-seasons
+          if git diff --cached --quiet; then
+            echo "No audio changes to commit."
+            exit 0
+          fi
+          git commit -m "Add public-domain Four Seasons recordings"
+          git push
