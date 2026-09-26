@@ -2289,6 +2289,92 @@ const sg=new THREE.BufferGeometry();sg.setAttribute("position",new THREE.BufferA
 
 const listener=new THREE.AudioListener();camera.add(listener);const music=new THREE.PositionalAudio(listener);shrine.add(music);music.setRefDistance(2);music.setMaxDistance(90);music.setRolloffFactor(1);music.setDistanceModel("linear");music.setLoop(true);music.setVolume(1);
 const low=listener.context.createBiquadFilter();low.type="lowpass";low.frequency.value=1100;low.Q.value=.6;music.setFilter(low);let loaded=false,requested=false,usingPrototype=false;
+const recordingLoader=new THREE.AudioLoader();
+const seasonTracks={
+  winter:[
+    "assets/audio/four-seasons/winter-1-allegro-non-molto.mp3",
+    "assets/audio/four-seasons/winter-2-largo.mp3",
+    "assets/audio/four-seasons/winter-3-allegro.mp3"
+  ],
+  spring:[
+    "assets/audio/four-seasons/spring-1-allegro.mp3",
+    "assets/audio/four-seasons/spring-2-largo.mp3",
+    "assets/audio/four-seasons/spring-3-allegro.mp3"
+  ],
+  summer:[
+    "assets/audio/four-seasons/summer-1-allegro-non-molto.mp3",
+    "assets/audio/four-seasons/summer-2-adagio.mp3",
+    "assets/audio/four-seasons/summer-3-presto.mp3"
+  ],
+  autumn:[
+    "assets/audio/four-seasons/autumn-1-allegro.mp3",
+    "assets/audio/four-seasons/autumn-2-adagio-molto.mp3",
+    "assets/audio/four-seasons/autumn-3-allegro.mp3"
+  ]
+};
+let soundtrackToken=0,soundtrackSeason="winter",soundtrackIndex=0;
+
+function loadSeasonMovement(season,index,token){
+  const tracks=seasonTracks[season];
+  if(!tracks||!tracks.length)return;
+  const safeIndex=((index%tracks.length)+tracks.length)%tracks.length;
+  const url=tracks[safeIndex];
+
+  recordingLoader.load(
+    url,
+    b=>{
+      if(token!==soundtrackToken||world!==season)return;
+
+      if(music.isPlaying)music.stop();
+      music.setBuffer(b);
+      music.setLoop(false);
+      music.setVolume(1);
+      music.setRefDistance(8);
+      music.setRolloffFactor(.6);
+      loaded=true;
+      usingPrototype=false;
+      low.frequency.setValueAtTime(15000,listener.context.currentTime);
+
+      if(listener.context.state==="suspended")listener.context.resume().catch(()=>{});
+      music.play();
+
+      if(music.source){
+        const src=music.source;
+        src.onended=()=>{
+          music.onEnded();
+          if(token!==soundtrackToken||world!==season||transitioning)return;
+          soundtrackIndex=(safeIndex+1)%tracks.length;
+          loadSeasonMovement(season,soundtrackIndex,token);
+        };
+      }
+
+      // Warm the browser cache for the next movement without decoding it yet.
+      // That keeps transitions quick without holding an entire concerto in RAM.
+      const next=tracks[(safeIndex+1)%tracks.length];
+      fetch(next,{cache:"force-cache"}).catch(()=>{});
+    },
+    undefined,
+    ()=>{
+      if(token===soundtrackToken&&world===season){
+        console.info("Recording unavailable; continuing with built-in fallback music:",url);
+      }
+    }
+  );
+}
+
+function startSeasonSoundtrack(season,fallbackBuffer=null){
+  const token=++soundtrackToken;
+  soundtrackSeason=season;
+  soundtrackIndex=0;
+
+  // Start a tiny built-in fallback immediately so iPhone/Safari receives audio
+  // inside the original tap gesture. The real recording replaces it when ready.
+  if(fallbackBuffer)playSeasonMusic(fallbackBuffer);
+  else startPrototypeMusic();
+
+  loadSeasonMovement(season,0,token);
+}
+
 
 function makePrototypeMusic(){
   const ctx=listener.context,sr=ctx.sampleRate,step=.29;
@@ -2341,7 +2427,7 @@ function startPrototypeMusic(){
   loaded=true;
   usingPrototype=true;
   music.play();
-  console.info("Using built-in prototype music. Add winter.mp3 later for the real recording.");
+  console.info("Using built-in fallback music while the season recording loads.");
 }
 
 function makeSpringMusic(){
@@ -2494,7 +2580,7 @@ function enterSpring(){
     configureEnemies("spring");
     worldName.textContent="Spring";
     resetPlayer();
-    playSeasonMusic(makeSpringMusic());
+    startSeasonSoundtrack("spring",makeSpringMusic());
     setSeasonTitle("Spring");
 
     worldFade.classList.remove("show");
@@ -2528,7 +2614,7 @@ function enterSummer(){
     configureEnemies("summer");
     worldName.textContent="Summer";
     resetPlayer();
-    playSeasonMusic(makeSummerMusic());
+    startSeasonSoundtrack("summer",makeSummerMusic());
     setSeasonTitle("Summer");
 
     worldFade.classList.remove("show");
@@ -2562,7 +2648,7 @@ function enterAutumn(){
     configureEnemies("autumn");
     worldName.textContent="Autumn";
     resetPlayer();
-    playSeasonMusic(makeAutumnMusic());
+    startSeasonSoundtrack("autumn",makeAutumnMusic());
     setSeasonTitle("Autumn");
 
     worldFade.classList.remove("show");
@@ -2573,27 +2659,7 @@ function enterAutumn(){
 function audio(){
   if(requested){if(loaded&&!music.isPlaying)music.play();return}
   requested=true;
-
-  // Start audible prototype music immediately inside the tap/click gesture.
-  // This is important on iPhone/Safari, which is stricter about audio startup.
-  startPrototypeMusic();
-
-  // If a real winter.mp3 exists, swap it in when it finishes loading.
-  new THREE.AudioLoader().load(
-    "winter.mp3",
-    b=>{
-      if(music.isPlaying) music.stop();
-      music.setBuffer(b);
-      music.setLoop(true);
-      music.setVolume(1);
-      loaded=true;
-      usingPrototype=false;
-      if(listener.context.state==="suspended") listener.context.resume().catch(()=>{});
-      music.play();
-    },
-    undefined,
-    ()=>console.info("winter.mp3 not present; continuing with built-in prototype music")
-  );
+  startSeasonSoundtrack("winter");
 }
 
 const boatForward=new THREE.Vector3();
