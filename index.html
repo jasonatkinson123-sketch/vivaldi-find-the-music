@@ -22,6 +22,7 @@ button{appearance:none;background:transparent;border:1px solid #444;color:#eee;p
 #factCard.show{opacity:1;transform:translate(-50%,0)}
 #factCard .kicker{font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:#ffd978;margin-bottom:6px}
 #factCard .fact{font-size:14px;line-height:1.38;letter-spacing:.015em;color:#f7f4ea}
+#hitFlash{position:fixed;inset:0;z-index:18;pointer-events:none;background:#fff;opacity:0;transition:opacity .22s ease}#hitFlash.show{opacity:.34}
 #worldFade{position:fixed;inset:0;z-index:19;background:#000;opacity:0;pointer-events:none;transition:opacity .75s ease}
 #worldFade.show{opacity:1}
 #vig{position:fixed;inset:0;z-index:6;pointer-events:none;background:radial-gradient(circle at center,transparent 48%,#0001 72%,#0008 130%)}
@@ -35,6 +36,7 @@ button{appearance:none;background:transparent;border:1px solid #444;color:#eee;p
 <div id="hud"><span id="worldName">Winter</span><br><strong><span id="coinCount">0</span> / 6 Zecchini</strong></div>
 <div id="collectFlash"></div>
 <div id="factCard"><div class="kicker"></div><div class="fact"></div></div>
+<div id="hitFlash"></div>
 <div id="worldFade"></div>
 <div id="touch"><div id="moveZone" class="zone left"></div><div id="lookZone" class="zone right"></div><div id="base"><div id="knob"></div></div><div id="hint">LEFT — MOVE &nbsp;&nbsp; RIGHT — LOOK</div></div>
 <div id="vig"></div>
@@ -47,9 +49,9 @@ const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0d1b2d); scene
 const camera=new THREE.PerspectiveCamera(68,innerWidth/innerHeight,.1,120); camera.position.set(-23,1.7,22); camera.rotation.order="YXZ";
 const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); renderer.setSize(innerWidth,innerHeight); renderer.outputColorSpace=THREE.SRGBColorSpace; document.body.prepend(renderer.domElement);
 
-const veil=document.querySelector("#veil"),enter=document.querySelector("#enter"),info=document.querySelector("#info"),pause=document.querySelector("#pause"),resume=document.querySelector("#resume"),found=document.querySelector("#found"),moveZone=document.querySelector("#moveZone"),lookZone=document.querySelector("#lookZone"),base=document.querySelector("#base"),knob=document.querySelector("#knob"),hud=document.querySelector("#hud"),worldName=document.querySelector("#worldName"),coinCount=document.querySelector("#coinCount"),collectFlash=document.querySelector("#collectFlash"),factCard=document.querySelector("#factCard"),factKicker=factCard.querySelector(".kicker"),factText=factCard.querySelector(".fact"),worldFade=document.querySelector("#worldFade");
+const veil=document.querySelector("#veil"),enter=document.querySelector("#enter"),info=document.querySelector("#info"),pause=document.querySelector("#pause"),resume=document.querySelector("#resume"),found=document.querySelector("#found"),moveZone=document.querySelector("#moveZone"),lookZone=document.querySelector("#lookZone"),base=document.querySelector("#base"),knob=document.querySelector("#knob"),hud=document.querySelector("#hud"),worldName=document.querySelector("#worldName"),coinCount=document.querySelector("#coinCount"),collectFlash=document.querySelector("#collectFlash"),factCard=document.querySelector("#factCard"),factKicker=factCard.querySelector(".kicker"),factText=factCard.querySelector(".fact"),hitFlash=document.querySelector("#hitFlash"),worldFade=document.querySelector("#worldFade");
 const mobile=matchMedia("(pointer:coarse)").matches||("ontouchstart"in window); if(mobile){document.body.classList.add("mobile");enter.textContent="Tap to Enter"}
-let started=false,done=false,yaw=0,pitch=-.03,mx=0,my=0,moveId=null,lookId=null,ox=0,oy=0,lx=0,ly=0,collected=0,portalActive=false,transitioning=false,world="winter";
+let started=false,done=false,yaw=0,pitch=-.03,mx=0,my=0,moveId=null,lookId=null,ox=0,oy=0,lx=0,ly=0,collected=0,portalActive=false,transitioning=false,world="winter",gameComplete=false,collectionSerial=0,enemyHitUntil=0;
 
 scene.add(new THREE.HemisphereLight(0x9bb7d8,0x29313d,1.42));
 const moonLight=new THREE.DirectionalLight(0xc8dcff,1.95); moonLight.position.set(-18,28,12); scene.add(moonLight);
@@ -127,7 +129,7 @@ for(let i=0;i<coinPositions.length;i++){
   mark.rotation.y=Math.PI/2;
   g.add(mark);
   g.position.set(...coinPositions[i]);
-  g.userData={collected:false,phase:i*.91,baseY:coinPositions[i][1]};
+  g.userData={collected:false,phase:i*.91,baseY:coinPositions[i][1],factGiven:false,collectOrder:0};
   scene.add(g);
   coins.push(g);
 }
@@ -222,6 +224,8 @@ function resetCoins(season){
     coin.position.set(...p);
     coin.userData.baseY=p[1];
     coin.userData.collected=false;
+    coin.userData.factGiven=false;
+    coin.userData.collectOrder=0;
     coin.visible=true;
   }
 }
@@ -233,10 +237,16 @@ function collectCoin(coin){
   collected++;
   coinCount.textContent=collected;
   coinChime();
-  showNextFact();
+  coin.userData.collectOrder=++collectionSerial;
+  if(!coin.userData.factGiven){
+    coin.userData.factGiven=true;
+    showNextFact();
+  }
 
   if(collected===coins.length){
     if(world==="autumn"){
+      gameComplete=true;
+      enemyRoot.visible=false;
       collectFlash.textContent="The Four Seasons Complete";
       collectFlash.classList.add("show");
       setTimeout(()=>collectFlash.classList.remove("show"),3200);
@@ -312,6 +322,197 @@ function activatePortal(){
   portalRing.material.color.setHex(0xffffff);
   warm.intensity=5.4;
 }
+
+// Venetian mask figures: simple gliding hazards, no combat.
+const enemyRoot=new THREE.Group();
+scene.add(enemyRoot);
+const enemies=[];
+
+function makeMaskEnemy(){
+  const g=new THREE.Group();
+
+  const cloak=new THREE.Mesh(
+    new THREE.ConeGeometry(.48,1.55,6),
+    new THREE.MeshStandardMaterial({color:0x18151b,roughness:.88})
+  );
+  cloak.position.y=.78;
+  g.add(cloak);
+
+  const head=new THREE.Mesh(
+    new THREE.SphereGeometry(.24,8,6),
+    new THREE.MeshStandardMaterial({color:0x29232b,roughness:.9})
+  );
+  head.position.y=1.62;
+  g.add(head);
+
+  const mask=new THREE.Mesh(
+    new THREE.SphereGeometry(.19,8,6),
+    new THREE.MeshStandardMaterial({color:0xe8e1d4,roughness:.75})
+  );
+  mask.scale.set(.78,1.0,.28);
+  mask.position.set(0,1.62,.205);
+  g.add(mask);
+
+  const eyeMat=new THREE.MeshBasicMaterial({color:0x5d0909});
+  for(const x of[-.07,.07]){
+    const eye=new THREE.Mesh(new THREE.SphereGeometry(.018,5,4),eyeMat);
+    eye.position.set(x,1.66,.258);
+    g.add(eye);
+  }
+
+  const shadow=new THREE.Mesh(
+    new THREE.CircleGeometry(.48,12),
+    new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.2,depthWrite:false})
+  );
+  shadow.rotation.x=-Math.PI/2;
+  shadow.position.y=.015;
+  g.add(shadow);
+
+  enemyRoot.add(g);
+  return {group:g,a:new THREE.Vector3(),b:new THREE.Vector3(),dir:1,speed:1.2,chase:5.5,phase:Math.random()*10};
+}
+
+for(let i=0;i<3;i++)enemies.push(makeMaskEnemy());
+
+const enemyPlans={
+  winter:[
+    {a:[-16,16],b:[-16,-17],speed:1.05,chase:5.0}
+  ],
+  spring:[
+    {a:[-16,17],b:[-16,-17],speed:1.15,chase:5.4},
+    {a:[19,13],b:[19,-17],speed:1.2,chase:5.4}
+  ],
+  summer:[
+    {a:[-16,18],b:[-16,-19],speed:1.45,chase:6.2},
+    {a:[19,14],b:[19,-19],speed:1.55,chase:6.2}
+  ],
+  autumn:[
+    {a:[-16,17],b:[-16,-19],speed:1.55,chase:6.5},
+    {a:[19,13],b:[19,-19],speed:1.65,chase:6.5},
+    {a:[-10,-24],b:[18,-24],speed:1.45,chase:5.8}
+  ]
+};
+
+function configureEnemies(season){
+  const plans=enemyPlans[season]||[];
+  enemyRoot.visible=!gameComplete;
+  for(let i=0;i<enemies.length;i++){
+    const e=enemies[i],p=plans[i];
+    if(!p){e.group.visible=false;continue}
+    e.group.visible=true;
+    e.a.set(p.a[0],0,p.a[1]);
+    e.b.set(p.b[0],0,p.b[1]);
+    e.dir=1;
+    e.speed=p.speed;
+    e.chase=p.chase;
+    e.group.position.set(e.a.x,.04,e.a.z);
+  }
+}
+
+function enemyBuzz(){
+  if(!listener||listener.context.state!=="running")return;
+  const ctx=listener.context,now=ctx.currentTime,o=ctx.createOscillator(),g=ctx.createGain();
+  o.type="sawtooth";o.frequency.setValueAtTime(145,now);o.frequency.exponentialRampToValueAtTime(82,now+.18);
+  g.gain.setValueAtTime(.0001,now);g.gain.exponentialRampToValueAtTime(.045,now+.012);g.gain.exponentialRampToValueAtTime(.0001,now+.22);
+  o.connect(g).connect(ctx.destination);o.start(now);o.stop(now+.24);
+}
+
+function closePortalAfterLoss(){
+  if(!portalActive)return;
+  portalActive=false;
+  portalGroup.visible=false;
+  warm.color.setHex(world==="winter"?0xff8f4d:0xffc47a);
+}
+
+function enemyHit(){
+  const now=performance.now();
+  if(now<enemyHitUntil||transitioning||gameComplete)return;
+  enemyHitUntil=now+2400;
+
+  hitFlash.classList.add("show");
+  setTimeout(()=>hitFlash.classList.remove("show"),160);
+  enemyBuzz();
+
+  if(collected>0){
+    let stolen=null;
+    for(const coin of coins){
+      if(coin.userData.collected&&(!stolen||coin.userData.collectOrder>stolen.userData.collectOrder))stolen=coin;
+    }
+    if(stolen){
+      const idx=coins.indexOf(stolen);
+      const p=seasonCoinPositions[world][idx];
+      stolen.userData.collected=false;
+      stolen.userData.collectOrder=0;
+      stolen.position.set(...p);
+      stolen.userData.baseY=p[1];
+      stolen.visible=true;
+      collected--;
+      coinCount.textContent=collected;
+      closePortalAfterLoss();
+      collectFlash.textContent="A Mask Stole a Zecchino";
+    }
+  }else{
+    collectFlash.textContent="The Mask Found You";
+  }
+
+  collectFlash.classList.add("show");
+  setTimeout(()=>collectFlash.classList.remove("show"),1000);
+  camera.position.set(-23,1.7,22);
+  yaw=0;pitch=-.03;camera.rotation.set(pitch,yaw,0);
+}
+
+function updateEnemies(dt,t){
+  if(!started||transitioning||gameComplete)return;
+
+  for(const e of enemies){
+    if(!e.group.visible)continue;
+
+    const ex=e.group.position.x,ez=e.group.position.z;
+    const pd=Math.hypot(camera.position.x-ex,camera.position.z-ez);
+    let tx,tz,chasing=false;
+
+    if(pd<e.chase){
+      tx=camera.position.x;tz=camera.position.z;chasing=true;
+    }else{
+      const target=e.dir>0?e.b:e.a;
+      tx=target.x;tz=target.z;
+      if(Math.hypot(tx-ex,tz-ez)<.45){
+        e.dir*=-1;
+        const nt=e.dir>0?e.b:e.a;
+        tx=nt.x;tz=nt.z;
+      }
+    }
+
+    let dx=tx-ex,dz=tz-ez;
+    const len=Math.hypot(dx,dz)||1;
+    dx/=len;dz/=len;
+    const speed=e.speed*(chasing?1.18:1);
+    const nx=ex+dx*speed*dt,nz=ez+dz*speed*dt;
+
+    if(!collide(nx,nz)){
+      e.group.position.x=nx;
+      e.group.position.z=nz;
+    }else if(chasing){
+      const target=e.dir>0?e.b:e.a;
+      let px=target.x-ex,pz=target.z-ez;
+      const plen=Math.hypot(px,pz)||1;px/=plen;pz/=plen;
+      const pnx=ex+px*e.speed*dt,pnz=ez+pz*e.speed*dt;
+      if(!collide(pnx,pnz)){
+        e.group.position.x=pnx;e.group.position.z=pnz;
+        dx=px;dz=pz;
+      }
+    }else{
+      e.dir*=-1;
+    }
+
+    e.group.rotation.y=Math.atan2(dx,dz);
+    e.group.position.y=.04+Math.sin(t*2.1+e.phase)*.045;
+
+    if(Math.hypot(camera.position.x-e.group.position.x,camera.position.z-e.group.position.z)<.78)enemyHit();
+  }
+}
+
+configureEnemies("winter");
 
 // Spring scenery is prebuilt but hidden until the portal transition.
 const springDecor=new THREE.Group();
@@ -597,6 +798,7 @@ function enterSpring(){
     flakes.visible=false;
 
     resetCoins("spring");
+    configureEnemies("spring");
     worldName.textContent="Spring";
     resetPlayer();
     playSeasonMusic(makeSpringMusic());
@@ -627,6 +829,7 @@ function enterSummer(){
     flakes.visible=false;
 
     resetCoins("summer");
+    configureEnemies("summer");
     worldName.textContent="Summer";
     resetPlayer();
     playSeasonMusic(makeSummerMusic());
@@ -657,6 +860,7 @@ function enterAutumn(){
     flakes.visible=false;
 
     resetCoins("autumn");
+    configureEnemies("autumn");
     worldName.textContent="Autumn";
     resetPlayer();
     playSeasonMusic(makeAutumnMusic());
@@ -695,7 +899,7 @@ function audio(){
 
 const keys={},rad=.38,fwd=new THREE.Vector3(),right=new THREE.Vector3();let walkPhase=0,moveAmount=0;
 function lock(){renderer.domElement.requestPointerLock?.()}
-function begin(){started=true;veil.classList.add("hide");listener.context.resume().then(()=>audio()).catch(()=>audio());if(!mobile)lock();hud.classList.add("show");info.innerHTML=mobile?"COLLECT 6 ZECCHINI<br>LEFT — MOVE · RIGHT — LOOK":"COLLECT 6 ZECCHINI<br>WASD — MOVE · MOUSE — LOOK";info.classList.add("show");setTimeout(()=>info.classList.remove("show"),3600)}
+function begin(){started=true;veil.classList.add("hide");listener.context.resume().then(()=>audio()).catch(()=>audio());if(!mobile)lock();hud.classList.add("show");info.innerHTML=mobile?"COLLECT 6 ZECCHINI · AVOID THE MASKS<br>LEFT — MOVE · RIGHT — LOOK":"COLLECT 6 ZECCHINI · AVOID THE MASKS<br>WASD — MOVE · MOUSE — LOOK";info.classList.add("show");setTimeout(()=>info.classList.remove("show"),3600)}
 enter.onclick=begin;resume.onclick=()=>{listener.context.resume().catch(()=>{});if(!mobile)lock()};
 document.addEventListener("pointerlockchange",()=>{if(started&&!mobile)pause.classList.toggle("show",document.pointerLockElement!==renderer.domElement)});
 document.addEventListener("mousemove",e=>{if(document.pointerLockElement!==renderer.domElement)return;yaw-=e.movementX*.0019;pitch=THREE.MathUtils.clamp(pitch-e.movementY*.0019,-1.1,1.05);camera.rotation.set(pitch,yaw,0)});
@@ -779,7 +983,7 @@ for(const coin of coins){
   coin.position.y=coin.userData.baseY+Math.sin(t*2.1+coin.userData.phase)*.12;
   if(camera.position.distanceTo(coin.position)<1.15) collectCoin(coin);
 }
-mood(t);violin.rotation.y=Math.sin(t*.5)*.03;renderer.render(scene,camera)}
+updateEnemies(dt,t);mood(t);violin.rotation.y=Math.sin(t*.5)*.03;renderer.render(scene,camera)}
 animate();
 addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5))});
 </script>
