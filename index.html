@@ -83,7 +83,7 @@ const warm=new THREE.PointLight(0xff8f4d,2.1,13,1.6);warm.position.set(0,2.2,.4)
 const sp=new Float32Array(C.snow*3),ss=new Float32Array(C.snow);for(let i=0;i<C.snow;i++){sp[i*3]=THREE.MathUtils.randFloatSpread(65);sp[i*3+1]=THREE.MathUtils.randFloat(.5,24);sp[i*3+2]=THREE.MathUtils.randFloatSpread(65);ss[i]=THREE.MathUtils.randFloat(.55,1.25)}
 const sg=new THREE.BufferGeometry();sg.setAttribute("position",new THREE.BufferAttribute(sp,3));const flakes=new THREE.Points(sg,new THREE.PointsMaterial({color:0xe8f1ff,size:.09,transparent:true,opacity:.72,depthWrite:false}));scene.add(flakes);
 
-const listener=new THREE.AudioListener();camera.add(listener);const music=new THREE.PositionalAudio(listener);shrine.add(music);music.setRefDistance(4.2);music.setMaxDistance(80);music.setRolloffFactor(1.35);music.setDistanceModel("inverse");music.setLoop(true);music.setVolume(.95);
+const listener=new THREE.AudioListener();camera.add(listener);const music=new THREE.PositionalAudio(listener);shrine.add(music);music.setRefDistance(2);music.setMaxDistance(90);music.setRolloffFactor(1);music.setDistanceModel("linear");music.setLoop(true);music.setVolume(1);
 const low=listener.context.createBiquadFilter();low.type="lowpass";low.frequency.value=1100;low.Q.value=.6;music.setFilter(low);let loaded=false,requested=false,usingPrototype=false;
 
 function makePrototypeMusic(){
@@ -143,27 +143,31 @@ function audio(){
   if(requested){if(loaded&&!music.isPlaying)music.play();return}
   requested=true;
 
-  // Try the real file first. If it is not present, immediately fall back
-  // to a tiny synthesized baroque-style loop so the navigation mechanic works.
+  // Start audible prototype music immediately inside the tap/click gesture.
+  // This is important on iPhone/Safari, which is stricter about audio startup.
+  startPrototypeMusic();
+
+  // If a real winter.mp3 exists, swap it in when it finishes loading.
   new THREE.AudioLoader().load(
     "winter.mp3",
     b=>{
       if(music.isPlaying) music.stop();
       music.setBuffer(b);
       music.setLoop(true);
-      music.setVolume(.95);
+      music.setVolume(1);
       loaded=true;
       usingPrototype=false;
+      if(listener.context.state==="suspended") listener.context.resume().catch(()=>{});
       music.play();
     },
     undefined,
-    ()=>startPrototypeMusic()
+    ()=>console.info("winter.mp3 not present; continuing with built-in prototype music")
   );
 }
 
 const keys={},rad=.38,fwd=new THREE.Vector3(),right=new THREE.Vector3();
 function lock(){renderer.domElement.requestPointerLock?.()}
-function begin(){started=true;veil.classList.add("hide");listener.context.resume().catch(()=>{});audio();if(!mobile)lock();info.innerHTML=mobile?"LEFT — MOVE<br>RIGHT — LOOK":"WASD — MOVE<br>MOUSE — LOOK";info.classList.add("show");setTimeout(()=>info.classList.remove("show"),3600)}
+function begin(){started=true;veil.classList.add("hide");listener.context.resume().then(()=>audio()).catch(()=>audio());if(!mobile)lock();info.innerHTML=mobile?"SOUND ON<br>LEFT — MOVE · RIGHT — LOOK":"SOUND ON<br>WASD — MOVE · MOUSE — LOOK";info.classList.add("show");setTimeout(()=>info.classList.remove("show"),3600)}
 enter.onclick=begin;resume.onclick=()=>{listener.context.resume().catch(()=>{});if(!mobile)lock()};
 document.addEventListener("pointerlockchange",()=>{if(started&&!mobile)pause.classList.toggle("show",document.pointerLockElement!==renderer.domElement)});
 document.addEventListener("mousemove",e=>{if(document.pointerLockElement!==renderer.domElement)return;yaw-=e.movementX*.0019;pitch=THREE.MathUtils.clamp(pitch-e.movementY*.0019,-1.1,1.05);camera.rotation.set(pitch,yaw,0)});
