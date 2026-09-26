@@ -18,6 +18,8 @@ button{appearance:none;background:transparent;border:1px solid #444;color:#eee;p
 #hint{position:absolute;left:0;right:0;bottom:16px;text-align:center;color:#ffffff66;font-size:9px;letter-spacing:.16em;text-transform:uppercase;pointer-events:none}
 #hud{position:fixed;top:18px;left:18px;z-index:13;pointer-events:none;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#fff;text-shadow:0 2px 8px #000;opacity:0;transition:opacity .5s}#hud.show{opacity:1}#hud strong{font-size:16px;font-weight:400;letter-spacing:.12em;color:#ffd978}
 #collectFlash{position:fixed;inset:0;z-index:12;display:grid;place-items:center;pointer-events:none;opacity:0;transition:opacity .35s;text-align:center;text-transform:uppercase;letter-spacing:.24em;text-shadow:0 3px 18px #000}#collectFlash.show{opacity:1}
+#worldFade{position:fixed;inset:0;z-index:19;background:#000;opacity:0;pointer-events:none;transition:opacity .75s ease}
+#worldFade.show{opacity:1}
 #vig{position:fixed;inset:0;z-index:6;pointer-events:none;background:radial-gradient(circle at center,transparent 48%,#0001 72%,#0008 130%)}
 </style>
 </head>
@@ -28,6 +30,7 @@ button{appearance:none;background:transparent;border:1px solid #444;color:#eee;p
 <div id="found"><div><div class="n">Antonio Vivaldi</div><div class="w">Winter</div><div class="s">The Four Seasons — 1725</div></div></div>
 <div id="hud">Zecchini<br><strong><span id="coinCount">0</span> / 6</strong></div>
 <div id="collectFlash"></div>
+<div id="worldFade"></div>
 <div id="touch"><div id="moveZone" class="zone left"></div><div id="lookZone" class="zone right"></div><div id="base"><div id="knob"></div></div><div id="hint">LEFT — MOVE &nbsp;&nbsp; RIGHT — LOOK</div></div>
 <div id="vig"></div>
 
@@ -39,9 +42,9 @@ const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0d1b2d); scene
 const camera=new THREE.PerspectiveCamera(68,innerWidth/innerHeight,.1,120); camera.position.set(-23,1.7,22); camera.rotation.order="YXZ";
 const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); renderer.setSize(innerWidth,innerHeight); renderer.outputColorSpace=THREE.SRGBColorSpace; document.body.prepend(renderer.domElement);
 
-const veil=document.querySelector("#veil"),enter=document.querySelector("#enter"),info=document.querySelector("#info"),pause=document.querySelector("#pause"),resume=document.querySelector("#resume"),found=document.querySelector("#found"),moveZone=document.querySelector("#moveZone"),lookZone=document.querySelector("#lookZone"),base=document.querySelector("#base"),knob=document.querySelector("#knob"),hud=document.querySelector("#hud"),coinCount=document.querySelector("#coinCount"),collectFlash=document.querySelector("#collectFlash");
+const veil=document.querySelector("#veil"),enter=document.querySelector("#enter"),info=document.querySelector("#info"),pause=document.querySelector("#pause"),resume=document.querySelector("#resume"),found=document.querySelector("#found"),moveZone=document.querySelector("#moveZone"),lookZone=document.querySelector("#lookZone"),base=document.querySelector("#base"),knob=document.querySelector("#knob"),hud=document.querySelector("#hud"),coinCount=document.querySelector("#coinCount"),collectFlash=document.querySelector("#collectFlash"),worldFade=document.querySelector("#worldFade");
 const mobile=matchMedia("(pointer:coarse)").matches||("ontouchstart"in window); if(mobile){document.body.classList.add("mobile");enter.textContent="Tap to Enter"}
-let started=false,done=false,yaw=0,pitch=-.03,mx=0,my=0,moveId=null,lookId=null,ox=0,oy=0,lx=0,ly=0,collected=0;
+let started=false,done=false,yaw=0,pitch=-.03,mx=0,my=0,moveId=null,lookId=null,ox=0,oy=0,lx=0,ly=0,collected=0,portalActive=false,transitioning=false,world="winter";
 
 scene.add(new THREE.HemisphereLight(0x9bb7d8,0x29313d,1.42));
 const moonLight=new THREE.DirectionalLight(0xc8dcff,1.95); moonLight.position.set(-18,28,12); scene.add(moonLight);
@@ -135,9 +138,21 @@ function collectCoin(coin){
   coinCount.textContent=collected;
   coinChime();
 
-  collectFlash.textContent=collected===coins.length ? "All Zecchini Collected" : "+1 Zecchino";
-  collectFlash.classList.add("show");
-  setTimeout(()=>collectFlash.classList.remove("show"),collected===coins.length?1800:650);
+  if(collected===coins.length){
+    collectFlash.textContent="Portal Open";
+    collectFlash.classList.add("show");
+    setTimeout(()=>collectFlash.classList.remove("show"),1200);
+    setTimeout(()=>{
+      info.innerHTML="RETURN TO THE ARCH";
+      info.classList.add("show");
+      setTimeout(()=>info.classList.remove("show"),2600);
+    },900);
+    activatePortal();
+  }else{
+    collectFlash.textContent="+1 Zecchino";
+    collectFlash.classList.add("show");
+    setTimeout(()=>collectFlash.classList.remove("show"),650);
+  }
 }
 
 
@@ -151,7 +166,64 @@ const up=new THREE.Mesh(new THREE.SphereGeometry(.36,12,8),vm);up.scale.set(.82,
 const neck=new THREE.Mesh(new THREE.BoxGeometry(.13,1.15,.1),vm);neck.position.y=2.25;violin.add(neck);
 const scroll=new THREE.Mesh(new THREE.SphereGeometry(.15,8,6),vm);scroll.position.y=2.9;violin.add(scroll);violin.rotation.z=-.12;violin.position.y=.28;shrine.add(violin);
 const orb=new THREE.Mesh(new THREE.SphereGeometry(.28,10,8),new THREE.MeshBasicMaterial({color:0xffb36b,transparent:true,opacity:.82}));orb.position.set(0,2.4,-.15);shrine.add(orb);
+
 const warm=new THREE.PointLight(0xff8f4d,2.1,13,1.6);warm.position.set(0,2.2,.4);shrine.add(warm);
+
+// The arch becomes a portal only after all six zecchini are collected.
+const portalGroup=new THREE.Group();
+portalGroup.position.set(0,1.78,.22);
+portalGroup.visible=false;
+shrine.add(portalGroup);
+
+const portalDisk=new THREE.Mesh(
+  new THREE.CircleGeometry(1.12,28),
+  new THREE.MeshBasicMaterial({color:0x8cf5d2,transparent:true,opacity:.34,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending})
+);
+portalGroup.add(portalDisk);
+
+const portalRing=new THREE.Mesh(
+  new THREE.TorusGeometry(1.18,.07,8,28),
+  new THREE.MeshBasicMaterial({color:0xe8fff4,transparent:true,opacity:.82,depthWrite:false,blending:THREE.AdditiveBlending})
+);
+portalGroup.add(portalRing);
+
+function activatePortal(){
+  if(portalActive||world!=="winter")return;
+  portalActive=true;
+  portalGroup.visible=true;
+  warm.color.setHex(0x9fffdc);
+  warm.intensity=5.4;
+}
+
+// Spring scenery is prebuilt but hidden until the portal transition.
+const springDecor=new THREE.Group();
+springDecor.visible=false;
+scene.add(springDecor);
+
+const trunkMat=new THREE.MeshStandardMaterial({color:0x6b4b31,roughness:1});
+const leafMat=new THREE.MeshStandardMaterial({color:0x6f9f58,roughness:.92});
+const blossomMat=new THREE.MeshStandardMaterial({color:0xf1b7c8,roughness:.9});
+const treeSpots=[[-21,11],[-20,-7],[-13,-20],[13,13],[20,2],[20,-16],[-8,18],[11,-24]];
+for(let i=0;i<treeSpots.length;i++){
+  const [x,z]=treeSpots[i];
+  const tree=new THREE.Group();
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.17,.24,2.1,6),trunkMat);
+  trunk.position.y=1.05;tree.add(trunk);
+  const crown=new THREE.Mesh(new THREE.DodecahedronGeometry(.95,0),i%3===0?blossomMat:leafMat);
+  crown.position.y=2.45;crown.scale.set(1,1.08,1);tree.add(crown);
+  tree.position.set(x,0,z);springDecor.add(tree);
+}
+
+for(let i=0;i<34;i++){
+  const flower=new THREE.Mesh(
+    new THREE.SphereGeometry(.055,5,4),
+    new THREE.MeshBasicMaterial({color:i%2?0xffd4df:0xfff0a8})
+  );
+  const side=i%2===0?-1:1;
+  flower.position.set(side*THREE.MathUtils.randFloat(8.5,24),.14,THREE.MathUtils.randFloat(-26,24));
+  springDecor.add(flower);
+}
+
 
 const sp=new Float32Array(C.snow*3),ss=new Float32Array(C.snow);for(let i=0;i<C.snow;i++){sp[i*3]=THREE.MathUtils.randFloatSpread(65);sp[i*3+1]=THREE.MathUtils.randFloat(.5,24);sp[i*3+2]=THREE.MathUtils.randFloatSpread(65);ss[i]=THREE.MathUtils.randFloat(.55,1.25)}
 const sg=new THREE.BufferGeometry();sg.setAttribute("position",new THREE.BufferAttribute(sp,3));const flakes=new THREE.Points(sg,new THREE.PointsMaterial({color:0xe8f1ff,size:.09,transparent:true,opacity:.72,depthWrite:false}));scene.add(flakes);
@@ -201,6 +273,7 @@ function makePrototypeMusic(){
   return buf;
 }
 
+
 function startPrototypeMusic(){
   if(music.isPlaying) music.stop();
   music.setBuffer(makePrototypeMusic());
@@ -211,6 +284,118 @@ function startPrototypeMusic(){
   music.play();
   console.info("Using built-in prototype music. Add winter.mp3 later for the real recording.");
 }
+
+function makeSpringMusic(){
+  const ctx=listener.context,sr=ctx.sampleRate,step=.22;
+  const chords=[
+    [329.63,392.00,493.88,659.25],
+    [392.00,493.88,587.33,783.99],
+    [440.00,523.25,659.25,880.00],
+    [349.23,440.00,523.25,698.46]
+  ];
+  const pattern=[0,2,1,3,2,3,1,2];
+  const total=chords.length*pattern.length*step;
+  const buf=ctx.createBuffer(1,Math.floor(total*sr),sr);
+  const data=buf.getChannelData(0);
+
+  function add(freq,start,dur,amp){
+    const a=Math.floor(start*sr),b=Math.min(data.length,Math.floor((start+dur)*sr));
+    for(let i=a;i<b;i++){
+      const t=(i-a)/sr;
+      const env=Math.min(1,t/.012)*Math.exp(-2.6*t/dur);
+      const ph=2*Math.PI*freq*t;
+      data[i]+=amp*env*(Math.sin(ph)+.16*Math.sin(ph*2));
+    }
+  }
+
+  let n=0;
+  for(let c=0;c<chords.length;c++){
+    const chord=chords[c];
+    for(let s=0;s<pattern.length;s++,n++){
+      const start=n*step;
+      add(chord[pattern[s]],start,step*.9,.16);
+      if(s===0||s===4)add(chord[0]/2,start,step*1.6,.07);
+    }
+  }
+  let peak=.001;
+  for(let i=0;i<data.length;i++)peak=Math.max(peak,Math.abs(data[i]));
+  const gain=.72/peak;
+  for(let i=0;i<data.length;i++)data[i]*=gain;
+  return buf;
+}
+
+function enterSpring(){
+  if(transitioning||world!=="winter")return;
+  transitioning=true;
+  worldFade.classList.add("show");
+
+  setTimeout(()=>{
+    world="spring";
+    portalActive=false;
+    portalGroup.visible=false;
+    springDecor.visible=true;
+
+    scene.background.setHex(0x79b6cf);
+    scene.fog.color.setHex(0xa8cfcb);
+    scene.fog.near=15;
+    scene.fog.far=66;
+
+    ground.material.color.setHex(0x667e55);
+    M.snow.color.setHex(0xa8b88b);
+    M.stone.color.setHex(0x8b8275);
+    M.dark.color.setHex(0x50565a);
+    M.a.color.setHex(0x9a806f);
+    M.b.color.setHex(0x87949a);
+    M.c.color.setHex(0x967a82);
+    M.roof.color.setHex(0x554d4a);
+    M.ice.color.setHex(0x4d91ad);
+    M.ice.emissive.setHex(0x15394b);
+    M.ice.emissiveIntensity=.18;
+
+    moon.material.color.setHex(0xffe6a1);
+    moon.position.set(-24,20,-35);
+    moon.scale.setScalar(1.35);
+    moonLight.color.setHex(0xffefca);
+    moonLight.intensity=2.25;
+
+    flakes.material.color.setHex(0xffdce8);
+    flakes.material.size=.11;
+    flakes.material.opacity=.52;
+
+    for(const q of lamps){
+      q.light.color.setHex(0xffd28c);
+      q.light.intensity=1.15;
+    }
+
+    if(music.isPlaying)music.stop();
+    music.setBuffer(makeSpringMusic());
+    music.setLoop(true);
+    music.setVolume(.95);
+    music.setRefDistance(8);
+    music.setRolloffFactor(.6);
+    loaded=true;
+    usingPrototype=true;
+    low.frequency.setValueAtTime(15000,listener.context.currentTime);
+    music.play();
+
+    camera.position.set(-23,1.7,22);
+    yaw=0;
+    pitch=-.03;
+    camera.rotation.set(pitch,yaw,0);
+
+    hud.innerHTML='World II<br><strong>Spring</strong>';
+    const name=found.querySelector(".n"),work=found.querySelector(".w"),sub=found.querySelector(".s");
+    name.textContent="Antonio Vivaldi";
+    work.textContent="Spring";
+    sub.textContent="The Four Seasons — 1725";
+    found.classList.add("show");
+    setTimeout(()=>found.classList.remove("show"),5200);
+
+    worldFade.classList.remove("show");
+    transitioning=false;
+  },780);
+}
+
 
 function audio(){
   if(requested){if(loaded&&!music.isPlaying)music.play();return}
@@ -258,16 +443,52 @@ function collide(x,z){if(x<-C.bound||x>C.bound||z<-C.bound||z>C.bound)return tru
 function move(dt){if(!started||(!mobile&&document.pointerLockElement!==renderer.domElement)){moveAmount=0;return}let x=mobile?mx:((keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0)),z=mobile?my:((keys.KeyS||keys.ArrowDown?1:0)-(keys.KeyW||keys.ArrowUp?1:0));if(Math.abs(x)<.02&&Math.abs(z)<.02){moveAmount+=(0-moveAmount)*Math.min(1,dt*8);camera.position.y=1.7+Math.sin(walkPhase)*.018*moveAmount;return}const n=Math.hypot(x,z);if(n>1){x/=n;z/=n}moveAmount+=(Math.min(1,n)-moveAmount)*Math.min(1,dt*10);walkPhase+=dt*8.2*Math.max(.25,moveAmount);fwd.set(-Math.sin(yaw),0,-Math.cos(yaw));right.set(Math.cos(yaw),0,-Math.sin(yaw));const dx=(right.x*x+fwd.x*-z)*C.speed*dt,dz=(right.z*x+fwd.z*-z)*C.speed*dt;if(!collide(camera.position.x+dx,camera.position.z))camera.position.x+=dx;if(!collide(camera.position.x,camera.position.z+dz))camera.position.z+=dz;camera.position.y=1.7+Math.sin(walkPhase)*.025*moveAmount}
 
 let foundAt=0;
-function mood(t){const d=camera.position.distanceTo(C.source),near=THREE.MathUtils.clamp(1-d/42,0,1);if(loaded)low.frequency.setTargetAtTime(done?16000:THREE.MathUtils.lerp(650,12000,near*near),listener.context.currentTime,.12);warm.intensity=done?4.6+Math.sin(t*2.2)*.5:1.25+near*2.1;orb.scale.setScalar(done?1.45+Math.sin(t*2.6)*.1:.85+near*.7);if(!done&&d<C.radius){done=true;foundAt=t;found.classList.add("show");M.ice.emissive.setHex(0x24424d);M.ice.emissiveIntensity=.55;if(loaded){music.setRefDistance(14);music.setRolloffFactor(.55);music.setVolume(1)}setTimeout(()=>found.classList.remove("show"),6200)}if(done&&t-foundAt<5)scene.fog.color.lerp(new THREE.Color(0x101423),.01)}
+function mood(t){
+  const d=camera.position.distanceTo(C.source);
+
+  if(world==="spring"){
+    warm.intensity=2.3+Math.sin(t*1.7)*.18;
+    orb.scale.setScalar(.92+Math.sin(t*1.8)*.04);
+    return;
+  }
+
+  const near=THREE.MathUtils.clamp(1-d/42,0,1);
+  if(loaded)low.frequency.setTargetAtTime(done?16000:THREE.MathUtils.lerp(650,12000,near*near),listener.context.currentTime,.12);
+
+  if(portalActive){
+    warm.intensity=5.2+Math.sin(t*3.0)*.9;
+    portalGroup.rotation.z=Math.sin(t*.8)*.06;
+    portalDisk.material.opacity=.3+.12*Math.sin(t*2.6);
+    portalRing.material.opacity=.7+.22*Math.sin(t*3.2);
+    portalGroup.scale.setScalar(1+.035*Math.sin(t*2.2));
+    if(d<2.15)enterSpring();
+  }else{
+    warm.intensity=done?4.6+Math.sin(t*2.2)*.5:1.25+near*2.1;
+  }
+
+  orb.scale.setScalar(done?1.45+Math.sin(t*2.6)*.1:.85+near*.7);
+
+  if(!done&&d<C.radius){
+    done=true;
+    foundAt=t;
+    found.classList.add("show");
+    M.ice.emissive.setHex(0x24424d);
+    M.ice.emissiveIntensity=.55;
+    if(loaded){music.setRefDistance(14);music.setRolloffFactor(.55);music.setVolume(1)}
+    setTimeout(()=>found.classList.remove("show"),6200);
+  }
+
+  if(done&&!portalActive&&t-foundAt<5)scene.fog.color.lerp(new THREE.Color(0x1a2940),.01);
+}
 
 const clock=new THREE.Clock();
 function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.05),t=clock.elapsedTime;move(dt);
 const gust=.72+.28*(.5+.5*Math.sin(t*.19));
-const p=flakes.geometry.attributes.position.array,b=(done?1.75:1)*gust;
+const p=flakes.geometry.attributes.position.array,b=(world==="spring"?.34:(done?1.75:1))*gust;
 for(let i=0;i<C.snow;i++){const k=i*3;p[k+1]-=C.snowSpeed*ss[i]*dt*b;p[k]+=Math.sin(t*.7+i*.31)*.018*b+p[k+1]*0;p[k+2]+=Math.cos(t*.43+i*.19)*.009*b;if(p[k+1]<.15){p[k+1]=THREE.MathUtils.randFloat(17,25);p[k]=THREE.MathUtils.randFloatSpread(65);p[k+2]=THREE.MathUtils.randFloatSpread(65)}}
 flakes.geometry.attributes.position.needsUpdate=true;
 for(let i=0;i<lamps.length;i++){const q=lamps[i],f=.94+.06*Math.sin(t*3.1+q.phase)+.025*Math.sin(t*7.7+q.phase*.7);q.light.intensity=1.05*f;q.bulb.material.opacity=.86+.08*f}
-if(!done)M.ice.emissiveIntensity=.11+.035*Math.sin(t*.55);
+if(world==="winter"&&!done)M.ice.emissiveIntensity=.11+.035*Math.sin(t*.55);
 for(const coin of coins){
   if(coin.userData.collected)continue;
   coin.rotation.y=t*1.5+coin.userData.phase;
