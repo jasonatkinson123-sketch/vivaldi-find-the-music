@@ -95,8 +95,8 @@ const seasonCoinPositions={
     [11.5,1.05,7],[18.5,1.05,-9],[17.5,1.05,-23]
   ],
   spring:[
-    [-21,1.05,17],[-14,1.05,1],[-11,1.05,-21],
-    [12,1.05,13],[20,1.05,-4],[15,1.05,-24]
+    [-20,1.05,14],[-16,1.05,0],[-16,1.05,-13],
+    [2,1.05,2],[19,1.05,5],[19,1.05,-15]
   ],
   summer:[
     [-19,1.05,9],[-16,1.05,-11],[-8.5,1.05,-24],
@@ -521,7 +521,7 @@ function enterSpring(){
     M.ice.color.setHex(0x4d91ad);M.ice.emissive.setHex(0x15394b);M.ice.emissiveIntensity=.18;
     moon.material.color.setHex(0xffe6a1);moon.position.set(-24,20,-35);moon.scale.setScalar(1.35);
     moonLight.color.setHex(0xffefca);moonLight.intensity=2.25;
-    flakes.material.color.setHex(0xffdce8);flakes.material.size=.11;flakes.material.opacity=.52;
+    flakes.visible=false;
 
     resetCoins("spring");
     worldName.textContent="Spring";
@@ -551,7 +551,7 @@ function enterSummer(){
     M.ice.color.setHex(0x3c8fb2);M.ice.emissive.setHex(0x0f3f55);M.ice.emissiveIntensity=.22;
     moon.material.color.setHex(0xffe08a);moon.position.set(-18,17,-35);moon.scale.setScalar(1.55);
     moonLight.color.setHex(0xffd89b);moonLight.intensity=2.55;
-    flakes.material.color.setHex(0xffe38e);flakes.material.size=.055;flakes.material.opacity=.34;
+    flakes.visible=false;
 
     resetCoins("summer");
     worldName.textContent="Summer";
@@ -581,7 +581,7 @@ function enterAutumn(){
     M.ice.color.setHex(0x4f7f8f);M.ice.emissive.setHex(0x1d3440);M.ice.emissiveIntensity=.12;
     moon.material.color.setHex(0xffc06c);moon.position.set(-20,13,-35);moon.scale.setScalar(1.35);
     moonLight.color.setHex(0xffb879);moonLight.intensity=1.9;
-    flakes.material.color.setHex(0xc96a3a);flakes.material.size=.075;flakes.material.opacity=.48;
+    flakes.visible=false;
 
     resetCoins("autumn");
     worldName.textContent="Autumn";
@@ -685,8 +685,10 @@ function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDel
 const gust=.72+.28*(.5+.5*Math.sin(t*.19));
 const particleFactor=world==="winter"?(done?1.75:1):(world==="spring"?.34:(world==="summer"?.12:.48));
 const p=flakes.geometry.attributes.position.array,b=particleFactor*gust;
-for(let i=0;i<C.snow;i++){const k=i*3;p[k+1]-=C.snowSpeed*ss[i]*dt*b;p[k]+=Math.sin(t*.7+i*.31)*.018*b+p[k+1]*0;p[k+2]+=Math.cos(t*.43+i*.19)*.009*b;if(p[k+1]<.15){p[k+1]=THREE.MathUtils.randFloat(17,25);p[k]=THREE.MathUtils.randFloatSpread(65);p[k+2]=THREE.MathUtils.randFloatSpread(65)}}
-flakes.geometry.attributes.position.needsUpdate=true;
+if(flakes.visible){
+  for(let i=0;i<C.snow;i++){const k=i*3;p[k+1]-=C.snowSpeed*ss[i]*dt*b;p[k]+=Math.sin(t*.7+i*.31)*.018*b;p[k+2]+=Math.cos(t*.43+i*.19)*.009*b;if(p[k+1]<.15){p[k+1]=THREE.MathUtils.randFloat(17,25);p[k]=THREE.MathUtils.randFloatSpread(65);p[k+2]=THREE.MathUtils.randFloatSpread(65)}}
+  flakes.geometry.attributes.position.needsUpdate=true;
+}
 for(let i=0;i<lamps.length;i++){const q=lamps[i],f=.94+.06*Math.sin(t*3.1+q.phase)+.025*Math.sin(t*7.7+q.phase*.7);const baseLamp=world==="winter"?1.15:(world==="autumn"?1.35:.9);q.light.intensity=baseLamp*f;q.bulb.material.opacity=.86+.08*f}
 if(world==="winter"&&!done)M.ice.emissiveIntensity=.11+.035*Math.sin(t*.55);
 if(world==="summer"&&summerDecor.visible){
