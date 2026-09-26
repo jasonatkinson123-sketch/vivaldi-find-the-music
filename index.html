@@ -2812,8 +2812,19 @@ function mood(t){
   const d=camera.position.distanceTo(C.source);
 
   if(world==="winter"){
-    const near=THREE.MathUtils.clamp(1-d/42,0,1);
-    if(loaded)low.frequency.setTargetAtTime(done?16000:THREE.MathUtils.lerp(650,12000,near*near),listener.context.currentTime,.12);
+    // Keep the "find the music" idea, but never bury Winter so deeply that it
+    // feels silent at the start. Distance now changes clarity rather than
+    // effectively muting the piece.
+    const near=THREE.MathUtils.clamp(1-d/70,0,1);
+    if(loaded){
+      const cutoff=done?16000:THREE.MathUtils.lerp(3200,13500,near*near);
+      low.frequency.setTargetAtTime(cutoff,listener.context.currentTime,.10);
+      if(!done){
+        music.setRefDistance(12);
+        music.setRolloffFactor(.45);
+        music.setVolume(1);
+      }
+    }
 
     if(!done&&d<C.radius){
       done=true;
