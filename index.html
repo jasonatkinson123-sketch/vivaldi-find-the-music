@@ -449,10 +449,10 @@ function updateShopAndDoor(t){
   const seasonColor=seasonDoorColors[world]||0xffffff;
   doorInnerMat.color.setHex(seasonColor);
   for(const s of doorStars){
-    s.material.opacity=(hasKey?.45:.16)+.18*(.5+.5*Math.sin(t*2+s.userData.phase));
+    s.material.opacity=(hasKey ? .45 : .16)+.18*(.5+.5*Math.sin(t*2+s.userData.phase));
   }
-  doorInnerMat.opacity=hasKey?.68+.12*Math.sin(t*2.2):.24+.035*Math.sin(t*1.4);
-  doorGlow.intensity=hasKey?2.7+.55*Math.sin(t*2.4):.42+.12*Math.sin(t*1.2);
+  doorInnerMat.opacity=hasKey ? .68+.12*Math.sin(t*2.2) : .24+.035*Math.sin(t*1.4);
+  doorGlow.intensity=hasKey ? 2.7+.55*Math.sin(t*2.4) : .42+.12*Math.sin(t*1.2);
 
   const now=performance.now();
   if(now<interactionLock)return;
