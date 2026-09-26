@@ -54,9 +54,10 @@ const M={
  ice:new THREE.MeshStandardMaterial({color:0x567080,roughness:.28,metalness:.12,transparent:true,opacity:.88,emissive:0x0b1720,emissiveIntensity:.12})
 };
 const obs=[];
+const lamps=[];
 function box(w,h,d,m,x,y,z){const q=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);q.position.set(x,y,z);scene.add(q);return q}
 function block(x,z,w,d,h,m){box(w,h,d,m,x,h/2,z);const r=new THREE.Mesh(new THREE.ConeGeometry(Math.max(w,d)*.66,1.7,4),M.roof);r.position.set(x,h+.72,z);r.rotation.y=Math.PI/4;scene.add(r);obs.push({x1:x-w/2-.35,x2:x+w/2+.35,z1:z-d/2-.35,z2:z+d/2+.35});const wm=new THREE.MeshBasicMaterial({color:0xdba46d,transparent:true,opacity:.35});for(let i=0,n=Math.max(1,Math.floor(w/4));i<n;i++){const p=new THREE.Mesh(new THREE.PlaneGeometry(.7,1.05),wm);p.position.set(x-w*.32+(i/Math.max(1,n-1))*w*.64,Math.min(3.2,h*.55),z+d/2+.01);scene.add(p)}}
-function lamp(x,z){box(.12,2.7,.12,M.dark,x,1.35,z);const b=new THREE.Mesh(new THREE.SphereGeometry(.15,8,6),new THREE.MeshBasicMaterial({color:0xffcf8a}));b.position.set(x,2.72,z);scene.add(b);const l=new THREE.PointLight(0xffa85c,1.05,8.5,2.2);l.position.set(x,2.65,z);scene.add(l)}
+function lamp(x,z){box(.12,2.7,.12,M.dark,x,1.35,z);const b=new THREE.Mesh(new THREE.SphereGeometry(.15,8,6),new THREE.MeshBasicMaterial({color:0xffcf8a}));b.position.set(x,2.72,z);scene.add(b);const l=new THREE.PointLight(0xffa85c,1.05,8.5,2.2);l.position.set(x,2.65,z);scene.add(l);lamps.push({light:l,bulb:b,phase:Math.random()*10})}
 
 const ground=new THREE.Mesh(new THREE.PlaneGeometry(74,74),new THREE.MeshStandardMaterial({color:0x161b24,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-.04;scene.add(ground);
 box(26,.12,19,M.stone,-15,.01,15);box(8,.11,50,M.stone,-16,.02,-5);box(9,.11,50,M.stone,19,.02,-5);box(36,.11,7,M.stone,2,.02,-24);
@@ -64,6 +65,16 @@ box(25.6,.035,2.2,M.snow,-15,.095,10.8);box(7.5,.035,14,M.snow,-16,.095,-1);box(
 box(10.8,.08,61,M.ice,2,.01,-1.5);box(.45,.75,61,M.dark,-3.55,.33,-1.5);box(.45,.75,61,M.dark,7.55,.33,-1.5);
 obs.push({x1:-3.5,x2:7.5,z1:-31,z2:-.5},{x1:-3.5,x2:7.5,z1:4.6,z2:29});
 box(11.4,.28,4.8,M.stone,2,.55,2.05);box(1.1,.5,4.8,M.dark,-3.2,.62,2.05);box(1.1,.5,4.8,M.dark,7.2,.62,2.05);
+
+// A frozen low-poly gondola silhouette: just enough Venice to register.
+const gondola=new THREE.Group();
+const hull=new THREE.Mesh(new THREE.BoxGeometry(4.6,.28,.9),new THREE.MeshStandardMaterial({color:0x111216,roughness:.9}));
+hull.rotation.y=.16;gondola.add(hull);
+const bow=new THREE.Mesh(new THREE.ConeGeometry(.34,1.25,5),new THREE.MeshStandardMaterial({color:0x111216,roughness:.9}));
+bow.rotation.z=Math.PI/2;bow.rotation.y=-.16;bow.position.set(2.45,.18,.39);gondola.add(bow);
+const stern=bow.clone();stern.rotation.z=-Math.PI/2;stern.position.set(-2.45,.18,-.39);gondola.add(stern);
+const seat=new THREE.Mesh(new THREE.BoxGeometry(1.2,.18,.65),M.dark);seat.position.y=.24;gondola.add(seat);
+gondola.position.set(2,.13,12);gondola.rotation.y=-.12;scene.add(gondola);
 
 block(-27,13,9,13,7.5,M.a);block(-27,-3,9,13,10,M.b);block(-27,-20,9,13,8.4,M.c);block(-10,-10,8.5,13,8.8,M.a);block(-10,-24,8.5,11,7.3,M.b);block(14,16,7,10,8.4,M.c);block(26,13,8,13,10,M.a);block(27,-4,8,14,8.2,M.b);block(27,-22,8,13,9.6,M.c);block(13,-29,10,6,7.8,M.a);
 lamp(-20,14);lamp(-12,4);lamp(-13,-14);lamp(14,8);lamp(17,-9);
@@ -165,7 +176,7 @@ function audio(){
   );
 }
 
-const keys={},rad=.38,fwd=new THREE.Vector3(),right=new THREE.Vector3();
+const keys={},rad=.38,fwd=new THREE.Vector3(),right=new THREE.Vector3();let walkPhase=0,moveAmount=0;
 function lock(){renderer.domElement.requestPointerLock?.()}
 function begin(){started=true;veil.classList.add("hide");listener.context.resume().then(()=>audio()).catch(()=>audio());if(!mobile)lock();info.innerHTML=mobile?"SOUND ON<br>LEFT — MOVE · RIGHT — LOOK":"SOUND ON<br>WASD — MOVE · MOUSE — LOOK";info.classList.add("show");setTimeout(()=>info.classList.remove("show"),3600)}
 enter.onclick=begin;resume.onclick=()=>{listener.context.resume().catch(()=>{});if(!mobile)lock()};
@@ -182,13 +193,20 @@ lookZone.addEventListener("touchmove",e=>{for(const t of e.changedTouches){if(t.
 lookZone.addEventListener("touchend",e=>{for(const t of e.changedTouches)if(t.identifier===lookId)lookId=null;e.preventDefault()},{passive:false});lookZone.addEventListener("touchcancel",()=>lookId=null);
 
 function collide(x,z){if(x<-C.bound||x>C.bound||z<-C.bound||z>C.bound)return true;for(const o of obs)if(x+rad>o.x1&&x-rad<o.x2&&z+rad>o.z1&&z-rad<o.z2)return true;return false}
-function move(dt){if(!started||(!mobile&&document.pointerLockElement!==renderer.domElement))return;let x=mobile?mx:((keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0)),z=mobile?my:((keys.KeyS||keys.ArrowDown?1:0)-(keys.KeyW||keys.ArrowUp?1:0));if(Math.abs(x)<.02&&Math.abs(z)<.02)return;const n=Math.hypot(x,z);if(n>1){x/=n;z/=n}fwd.set(-Math.sin(yaw),0,-Math.cos(yaw));right.set(Math.cos(yaw),0,-Math.sin(yaw));const dx=(right.x*x+fwd.x*-z)*C.speed*dt,dz=(right.z*x+fwd.z*-z)*C.speed*dt;if(!collide(camera.position.x+dx,camera.position.z))camera.position.x+=dx;if(!collide(camera.position.x,camera.position.z+dz))camera.position.z+=dz;camera.position.y=1.7}
+function move(dt){if(!started||(!mobile&&document.pointerLockElement!==renderer.domElement)){moveAmount=0;return}let x=mobile?mx:((keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0)),z=mobile?my:((keys.KeyS||keys.ArrowDown?1:0)-(keys.KeyW||keys.ArrowUp?1:0));if(Math.abs(x)<.02&&Math.abs(z)<.02){moveAmount+=(0-moveAmount)*Math.min(1,dt*8);camera.position.y=1.7+Math.sin(walkPhase)*.018*moveAmount;return}const n=Math.hypot(x,z);if(n>1){x/=n;z/=n}moveAmount+=(Math.min(1,n)-moveAmount)*Math.min(1,dt*10);walkPhase+=dt*8.2*Math.max(.25,moveAmount);fwd.set(-Math.sin(yaw),0,-Math.cos(yaw));right.set(Math.cos(yaw),0,-Math.sin(yaw));const dx=(right.x*x+fwd.x*-z)*C.speed*dt,dz=(right.z*x+fwd.z*-z)*C.speed*dt;if(!collide(camera.position.x+dx,camera.position.z))camera.position.x+=dx;if(!collide(camera.position.x,camera.position.z+dz))camera.position.z+=dz;camera.position.y=1.7+Math.sin(walkPhase)*.025*moveAmount}
 
 let foundAt=0;
 function mood(t){const d=camera.position.distanceTo(C.source),near=THREE.MathUtils.clamp(1-d/42,0,1);if(loaded)low.frequency.setTargetAtTime(done?16000:THREE.MathUtils.lerp(650,12000,near*near),listener.context.currentTime,.12);warm.intensity=done?4.6+Math.sin(t*2.2)*.5:1.25+near*2.1;orb.scale.setScalar(done?1.45+Math.sin(t*2.6)*.1:.85+near*.7);if(!done&&d<C.radius){done=true;foundAt=t;found.classList.add("show");M.ice.emissive.setHex(0x24424d);M.ice.emissiveIntensity=.55;if(loaded){music.setRefDistance(14);music.setRolloffFactor(.55);music.setVolume(1)}setTimeout(()=>found.classList.remove("show"),6200)}if(done&&t-foundAt<5)scene.fog.color.lerp(new THREE.Color(0x101423),.01)}
 
 const clock=new THREE.Clock();
-function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.05),t=clock.elapsedTime;move(dt);const p=flakes.geometry.attributes.position.array,b=done?1.75:1;for(let i=0;i<C.snow;i++){const k=i*3;p[k+1]-=C.snowSpeed*ss[i]*dt*b;p[k]+=Math.sin(t*.7+i*.31)*.018*b;p[k+2]+=Math.cos(t*.43+i*.19)*.009*b;if(p[k+1]<.15){p[k+1]=THREE.MathUtils.randFloat(17,25);p[k]=THREE.MathUtils.randFloatSpread(65);p[k+2]=THREE.MathUtils.randFloatSpread(65)}}flakes.geometry.attributes.position.needsUpdate=true;mood(t);violin.rotation.y=Math.sin(t*.5)*.03;renderer.render(scene,camera)}
+function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.05),t=clock.elapsedTime;move(dt);
+const gust=.72+.28*(.5+.5*Math.sin(t*.19));
+const p=flakes.geometry.attributes.position.array,b=(done?1.75:1)*gust;
+for(let i=0;i<C.snow;i++){const k=i*3;p[k+1]-=C.snowSpeed*ss[i]*dt*b;p[k]+=Math.sin(t*.7+i*.31)*.018*b+p[k+1]*0;p[k+2]+=Math.cos(t*.43+i*.19)*.009*b;if(p[k+1]<.15){p[k+1]=THREE.MathUtils.randFloat(17,25);p[k]=THREE.MathUtils.randFloatSpread(65);p[k+2]=THREE.MathUtils.randFloatSpread(65)}}
+flakes.geometry.attributes.position.needsUpdate=true;
+for(let i=0;i<lamps.length;i++){const q=lamps[i],f=.94+.06*Math.sin(t*3.1+q.phase)+.025*Math.sin(t*7.7+q.phase*.7);q.light.intensity=1.05*f;q.bulb.material.opacity=.86+.08*f}
+if(!done)M.ice.emissiveIntensity=.11+.035*Math.sin(t*.55);
+mood(t);violin.rotation.y=Math.sin(t*.5)*.03;renderer.render(scene,camera)}
 animate();
 addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5))});
 </script>
