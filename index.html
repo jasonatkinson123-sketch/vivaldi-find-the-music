@@ -61,7 +61,7 @@ const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio
 
 const veil=document.querySelector("#veil"),enter=document.querySelector("#enter"),info=document.querySelector("#info"),pause=document.querySelector("#pause"),resume=document.querySelector("#resume"),found=document.querySelector("#found"),moveZone=document.querySelector("#moveZone"),lookZone=document.querySelector("#lookZone"),base=document.querySelector("#base"),knob=document.querySelector("#knob"),hud=document.querySelector("#hud"),worldName=document.querySelector("#worldName"),coinCount=document.querySelector("#coinCount"),keyLine=document.querySelector("#keyLine"),collectFlash=document.querySelector("#collectFlash"),factCard=document.querySelector("#factCard"),factKicker=factCard.querySelector(".kicker"),factText=factCard.querySelector(".fact"),hitFlash=document.querySelector("#hitFlash"),worldFade=document.querySelector("#worldFade"),boatExit=document.querySelector("#boatExit"),shopExit=document.querySelector("#shopExit"),dialogueCard=document.querySelector("#dialogueCard"),dialogueSpeaker=dialogueCard.querySelector(".speaker"),dialogueLine=dialogueCard.querySelector(".line");
 const mobile=matchMedia("(pointer:coarse)").matches||("ontouchstart"in window); if(mobile){document.body.classList.add("mobile");enter.textContent="Tap to Enter"}
-let started=false,done=false,yaw=0,pitch=-.03,mx=0,my=0,moveId=null,lookId=null,ox=0,oy=0,lx=0,ly=0,collected=0,transitioning=false,world="winter",gameComplete=false,collectionSerial=0,enemyHitUntil=0,hasKey=false,shopReady=false,interactionLock=0,boating=false,boatHasLeftDock=false,boatCooldown=0,boatYaw=-Math.PI/2,inShop=false,currentShop=null,shopReturn=null,shopCooldown=0,shopConversationPlayed=false,dialogueTimer=null;
+let started=false,done=false,yaw=0,pitch=-.03,mx=0,my=0,moveId=null,lookId=null,ox=0,oy=0,lx=0,ly=0,collected=0,transitioning=false,world="winter",gameComplete=false,collectionSerial=0,enemyHitUntil=0,hasKey=false,shopReady=false,interactionLock=0,boating=false,boatHasLeftDock=false,boatCooldown=0,boatYaw=-Math.PI/2,inShop=false,currentShop=null,shopReturn=null,shopCooldown=0,shopConversationPlayed=false,dialogueTimer=null,festivalMode=false;
 
 scene.add(new THREE.HemisphereLight(0x9bb7d8,0x29313d,1.42));
 const moonLight=new THREE.DirectionalLight(0xc8dcff,1.95); moonLight.position.set(-18,28,12); scene.add(moonLight);
@@ -454,17 +454,22 @@ function completeFourSeasons(){
   if(gameComplete)return;
   gameComplete=true;transitioning=true;hasKey=false;
   enemyRoot.visible=false;
-  keyLine.textContent="Journey complete";
   doorInnerMat.color.setHex(0xffffff);doorInnerMat.opacity=.95;doorGlow.color.setHex(0xffffff);doorGlow.intensity=5;
 
   worldFade.classList.add("show");
   setTimeout(()=>{
+    activateFestival();
     found.querySelector(".n").textContent="Antonio Vivaldi";
     found.querySelector(".w").textContent="The Four Seasons";
-    found.querySelector(".s").textContent="Journey Complete · Venice — 1725";
+    found.querySelector(".s").textContent="Festival in Venice · Journey Complete";
     found.classList.add("show");
     worldFade.classList.remove("show");
-    setTimeout(()=>found.classList.remove("show"),7000);
+    transitioning=false;
+
+    collectFlash.textContent="The City Is Celebrating";
+    collectFlash.classList.add("show");
+    setTimeout(()=>collectFlash.classList.remove("show"),2200);
+    setTimeout(()=>found.classList.remove("show"),6500);
   },760);
 }
 
@@ -772,7 +777,7 @@ function playShopConversation(){
 }
 
 function enterShop(config,returnPoint){
-  if(inShop||boating||transitioning||gameComplete||performance.now()<shopCooldown)return;
+  if(inShop||boating||transitioning||(gameComplete&&!festivalMode)||performance.now()<shopCooldown)return;
   currentShop=config;shopReturn=returnPoint;
   inShop=true;shopConversationPlayed=false;shopCooldown=performance.now()+1400;
   document.body.classList.add("inshop");
@@ -798,7 +803,7 @@ function exitShop(){
 shopExit.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();if(inShop){shopCooldown=0;exitShop()}});
 
 function updateStorefronts(t){
-  if(!started||transitioning||gameComplete||inShop||boating)return;
+  if(!started||transitioning||(gameComplete&&!festivalMode)||inShop||boating)return;
   storefrontA.light.intensity=.85+.25*Math.sin(t*1.7);
   storefrontB.light.intensity=.85+.25*Math.sin(t*1.9+1.3);
   if(performance.now()<shopCooldown)return;
@@ -825,6 +830,176 @@ function updateInteriorShop(){
 }
 
 updateSeasonShops("winter");
+
+// FESTIVAL FINALE ---------------------------------------------------------
+const festivalRoot=new THREE.Group();
+festivalRoot.visible=false;
+scene.add(festivalRoot);
+
+const townspeople=[];
+const townRoutes=[
+  {a:[-18,15],b:[-15,-15],speed:.62},
+  {a:[-15,-15],b:[-18,15],speed:.56},
+  {a:[18,13],b:[20,-16],speed:.60},
+  {a:[20,-16],b:[18,13],speed:.54},
+  {a:[-11,-24],b:[17,-24],speed:.66},
+  {a:[17,-24],b:[-11,-24],speed:.58},
+  {a:[-21,13],b:[-14,8],speed:.47},
+  {a:[20,8],b:[15,12],speed:.45}
+];
+const townColors=[0x7f3d4b,0x355b74,0x6d6840,0x8a5a32,0x5e426e,0x3f6e61,0x8a7845,0x6d4040];
+
+function makeTownsperson(i){
+  const g=new THREE.Group();
+  const bodyMat=new THREE.MeshStandardMaterial({color:townColors[i%townColors.length],roughness:.9});
+  const skinMat=new THREE.MeshStandardMaterial({color:i%3===0?0xc98f6a:(i%3===1?0xe0b08a:0xb97859),roughness:.9});
+  const darkMat=new THREE.MeshStandardMaterial({color:0x2b2528,roughness:.92});
+
+  const body=new THREE.Mesh(new THREE.ConeGeometry(.38,.95,7),bodyMat);
+  body.position.y=.76;g.add(body);
+
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.19,8,6),skinMat);
+  head.position.y=1.38;g.add(head);
+
+  const hat=new THREE.Mesh(new THREE.CylinderGeometry(.22,.28,.12,8),darkMat);
+  hat.position.y=1.57;g.add(hat);
+
+  const legL=new THREE.Mesh(new THREE.BoxGeometry(.11,.55,.12),darkMat);
+  const legR=legL.clone();
+  legL.position.set(-.13,.28,0);legR.position.set(.13,.28,0);
+  g.add(legL,legR);
+
+  const r=townRoutes[i];
+  g.position.set(r.a[0],.02,r.a[1]);
+  festivalRoot.add(g);
+  return {group:g,legL,legR,a:new THREE.Vector3(r.a[0],0,r.a[1]),b:new THREE.Vector3(r.b[0],0,r.b[1]),dir:1,speed:r.speed,phase:i*.83,pause:0};
+}
+
+for(let i=0;i<townRoutes.length;i++)townspeople.push(makeTownsperson(i));
+
+const fireworks=[];
+let nextFireworkAt=0;
+const fireworkColors=[0xffd45d,0xff6f61,0x78c7ff,0x98f59a,0xd38cff,0xffa34f];
+
+function fireworkPop(){
+  if(!listener||listener.context.state!=="running")return;
+  const ctx=listener.context,now=ctx.currentTime;
+  const o=ctx.createOscillator(),g=ctx.createGain();
+  o.type="triangle";o.frequency.setValueAtTime(170,now);o.frequency.exponentialRampToValueAtTime(65,now+.16);
+  g.gain.setValueAtTime(.0001,now);
+  g.gain.exponentialRampToValueAtTime(.035,now+.008);
+  g.gain.exponentialRampToValueAtTime(.0001,now+.3);
+  o.connect(g).connect(ctx.destination);o.start(now);o.stop(now+.34);
+}
+
+function launchFirework(){
+  const count=34;
+  const positions=new Float32Array(count*3);
+  const velocities=new Float32Array(count*3);
+  const colors=new Float32Array(count*3);
+  const x=THREE.MathUtils.randFloat(-18,18);
+  const y=THREE.MathUtils.randFloat(11,19);
+  const z=THREE.MathUtils.randFloat(-20,8);
+  const baseColor=new THREE.Color(fireworkColors[Math.floor(Math.random()*fireworkColors.length)]);
+
+  for(let i=0;i<count;i++){
+    positions[i*3]=x;positions[i*3+1]=y;positions[i*3+2]=z;
+    const theta=Math.random()*Math.PI*2;
+    const phi=Math.acos(THREE.MathUtils.randFloatSpread(2));
+    const speed=THREE.MathUtils.randFloat(2.4,5.8);
+    velocities[i*3]=Math.sin(phi)*Math.cos(theta)*speed;
+    velocities[i*3+1]=Math.cos(phi)*speed;
+    velocities[i*3+2]=Math.sin(phi)*Math.sin(theta)*speed;
+    const col=baseColor.clone().offsetHSL(THREE.MathUtils.randFloatSpread(.025),0,THREE.MathUtils.randFloat(-.05,.12));
+    colors[i*3]=col.r;colors[i*3+1]=col.g;colors[i*3+2]=col.b;
+  }
+
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute("position",new THREE.BufferAttribute(positions,3));
+  geo.setAttribute("color",new THREE.BufferAttribute(colors,3));
+  const mat=new THREE.PointsMaterial({size:.16,vertexColors:true,transparent:true,opacity:1,depthWrite:false,blending:THREE.AdditiveBlending});
+  const pts=new THREE.Points(geo,mat);
+  scene.add(pts);
+  fireworks.push({points:pts,velocities,life:1.75,ttl:1.75});
+  fireworkPop();
+}
+
+function updateFestival(dt,t){
+  if(!festivalMode)return;
+
+  for(const p of townspeople){
+    if(p.pause>0){p.pause-=dt;continue}
+    const target=p.dir>0?p.b:p.a;
+    let dx=target.x-p.group.position.x,dz=target.z-p.group.position.z;
+    const d=Math.hypot(dx,dz);
+    if(d<.28){
+      p.dir*=-1;
+      p.pause=.7+Math.random()*1.5;
+      continue;
+    }
+    dx/=d;dz/=d;
+    p.group.position.x+=dx*p.speed*dt;
+    p.group.position.z+=dz*p.speed*dt;
+    p.group.rotation.y=Math.atan2(dx,dz);
+    const swing=Math.sin(t*5.5+p.phase)*.36;
+    p.legL.rotation.x=swing;p.legR.rotation.x=-swing;
+    p.group.position.y=.02+Math.abs(Math.sin(t*5.5+p.phase))*.018;
+  }
+
+  if(t>nextFireworkAt){
+    launchFirework();
+    nextFireworkAt=t+THREE.MathUtils.randFloat(1.7,3.3);
+  }
+
+  for(let i=fireworks.length-1;i>=0;i--){
+    const fw=fireworks[i],arr=fw.points.geometry.attributes.position.array;
+    fw.life-=dt;
+    for(let j=0;j<arr.length/3;j++){
+      fw.velocities[j*3+1]-=2.1*dt;
+      arr[j*3]+=fw.velocities[j*3]*dt;
+      arr[j*3+1]+=fw.velocities[j*3+1]*dt;
+      arr[j*3+2]+=fw.velocities[j*3+2]*dt;
+    }
+    fw.points.geometry.attributes.position.needsUpdate=true;
+    fw.points.material.opacity=Math.max(0,fw.life/fw.ttl);
+    if(fw.life<=0){
+      scene.remove(fw.points);
+      fw.points.geometry.dispose();fw.points.material.dispose();
+      fireworks.splice(i,1);
+    }
+  }
+}
+
+function activateFestival(){
+  festivalMode=true;
+  festivalRoot.visible=true;
+  enemyRoot.visible=false;
+  flakes.visible=false;
+
+  // Restore Venice to a warm, welcoming evening.
+  springDecor.visible=true;
+  summerDecor.visible=false;
+  autumnDecor.visible=false;
+  scene.background.setHex(0x344f69);
+  scene.fog.color.setHex(0x536a78);scene.fog.near=24;scene.fog.far=92;
+  ground.material.color.setHex(0x667153);
+  M.snow.color.setHex(0x9ca77d);
+  M.stone.color.setHex(0x8f8273);
+  M.dark.color.setHex(0x4d4748);
+  M.a.color.setHex(0xa67e68);M.b.color.setHex(0x879399);M.c.color.setHex(0x9c7378);M.roof.color.setHex(0x514746);
+  M.ice.color.setHex(0x397f9e);M.ice.emissive.setHex(0x123546);M.ice.emissiveIntensity=.22;
+  moon.material.color.setHex(0xffe4a8);moon.position.set(-23,18,-35);moon.scale.setScalar(1.3);
+  moonLight.color.setHex(0xffd5a2);moonLight.intensity=2.15;
+
+  for(const coin of coins)coin.visible=false;
+  shopReady=false;hasKey=false;
+  doorInnerMat.color.setHex(0xffe6a3);doorInnerMat.opacity=.48;
+  doorGlow.color.setHex(0xffd18b);doorGlow.intensity=1.5;
+  shopGlow.intensity=1.15;
+
+  hud.innerHTML="<span>Festival in Venice</span><br><strong>The Four Seasons Complete</strong><br><span>Explore · Shops · Gondola</span>";
+  nextFireworkAt=clock.elapsedTime+.35;
+}
 
 // Venetian mask figures: simple gliding hazards, no combat.
 const enemyRoot=new THREE.Group();
@@ -1423,7 +1598,7 @@ function resetBoat(){
 }
 
 function boardBoat(){
-  if(boating||transitioning||gameComplete||performance.now()<boatCooldown)return;
+  if(boating||transitioning||(gameComplete&&!festivalMode)||performance.now()<boatCooldown)return;
   boating=true;
   document.body.classList.add("boating");
   boatHasLeftDock=false;
@@ -1467,7 +1642,7 @@ boatExit.addEventListener("click",e=>{
 });
 
 function updateBoat(dt,t){
-  if(!started||transitioning||gameComplete)return;
+  if(!started||transitioning||(gameComplete&&!festivalMode))return;
 
   if(!boating){
     const boatAtDock=Math.hypot(gondola.position.x-boatHome.x,gondola.position.z-boatHome.z)<.9;
@@ -1565,7 +1740,7 @@ function mood(t){
     if(done&&t-foundAt<5)scene.fog.color.lerp(new THREE.Color(0x1a2940),.01);
   }
 
-  const base=world==="winter"?(done?4.4:1.65):2.15;
+  const base=festivalMode?3.0:(world==="winter"?(done?4.4:1.65):2.15);
   warm.intensity=base+Math.sin(t*1.8)*.18;
   orb.scale.setScalar(.92+Math.sin(t*1.8)*.04);
 }
@@ -1579,7 +1754,7 @@ if(flakes.visible){
   for(let i=0;i<C.snow;i++){const k=i*3;p[k+1]-=C.snowSpeed*ss[i]*dt*b;p[k]+=Math.sin(t*.7+i*.31)*.018*b;p[k+2]+=Math.cos(t*.43+i*.19)*.009*b;if(p[k+1]<.15){p[k+1]=THREE.MathUtils.randFloat(17,25);p[k]=THREE.MathUtils.randFloatSpread(65);p[k+2]=THREE.MathUtils.randFloatSpread(65)}}
   flakes.geometry.attributes.position.needsUpdate=true;
 }
-for(let i=0;i<lamps.length;i++){const q=lamps[i],f=.94+.06*Math.sin(t*3.1+q.phase)+.025*Math.sin(t*7.7+q.phase*.7);const baseLamp=world==="winter"?1.15:(world==="autumn"?1.35:.9);q.light.intensity=baseLamp*f;q.bulb.material.opacity=.86+.08*f}
+for(let i=0;i<lamps.length;i++){const q=lamps[i],f=.94+.06*Math.sin(t*3.1+q.phase)+.025*Math.sin(t*7.7+q.phase*.7);const baseLamp=festivalMode?1.75:(world==="winter"?1.15:(world==="autumn"?1.35:.9));q.light.intensity=baseLamp*f;q.bulb.material.opacity=.86+.08*f}
 if(world==="winter"&&!done)M.ice.emissiveIntensity=.11+.035*Math.sin(t*.55);
 if(world==="summer"&&summerDecor.visible){
   for(const child of summerDecor.children){
@@ -1596,7 +1771,7 @@ for(const coin of coins){
   coin.position.y=coin.userData.baseY+Math.sin(t*2.1+coin.userData.phase)*.12;
   if(camera.position.distanceTo(coin.position)<1.15) collectCoin(coin);
 }
-updateInteriorShop();updateStorefronts(t);updateShopAndDoor(t);updateEnemies(dt,t);mood(t);violin.rotation.y=Math.sin(t*.5)*.03;renderer.render(scene,camera)}
+updateInteriorShop();updateStorefronts(t);updateShopAndDoor(t);updateEnemies(dt,t);updateFestival(dt,t);mood(t);violin.rotation.y=Math.sin(t*.5)*.03;renderer.render(scene,camera)}
 animate();
 addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5))});
 </script>
