@@ -51,7 +51,7 @@ const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio
 
 const veil=document.querySelector("#veil"),enter=document.querySelector("#enter"),info=document.querySelector("#info"),pause=document.querySelector("#pause"),resume=document.querySelector("#resume"),found=document.querySelector("#found"),moveZone=document.querySelector("#moveZone"),lookZone=document.querySelector("#lookZone"),base=document.querySelector("#base"),knob=document.querySelector("#knob"),hud=document.querySelector("#hud"),worldName=document.querySelector("#worldName"),coinCount=document.querySelector("#coinCount"),keyLine=document.querySelector("#keyLine"),collectFlash=document.querySelector("#collectFlash"),factCard=document.querySelector("#factCard"),factKicker=factCard.querySelector(".kicker"),factText=factCard.querySelector(".fact"),hitFlash=document.querySelector("#hitFlash"),worldFade=document.querySelector("#worldFade");
 const mobile=matchMedia("(pointer:coarse)").matches||("ontouchstart"in window); if(mobile){document.body.classList.add("mobile");enter.textContent="Tap to Enter"}
-let started=false,done=false,yaw=0,pitch=-.03,mx=0,my=0,moveId=null,lookId=null,ox=0,oy=0,lx=0,ly=0,collected=0,transitioning=false,world="winter",gameComplete=false,collectionSerial=0,enemyHitUntil=0,hasKey=false,shopReady=false,interactionLock=0;
+let started=false,done=false,yaw=0,pitch=-.03,mx=0,my=0,moveId=null,lookId=null,ox=0,oy=0,lx=0,ly=0,collected=0,transitioning=false,world="winter",gameComplete=false,collectionSerial=0,enemyHitUntil=0,hasKey=false,shopReady=false,interactionLock=0,boating=false,boatHasLeftDock=false,boatCooldown=0,boatYaw=-Math.PI/2;
 
 scene.add(new THREE.HemisphereLight(0x9bb7d8,0x29313d,1.42));
 const moonLight=new THREE.DirectionalLight(0xc8dcff,1.95); moonLight.position.set(-18,28,12); scene.add(moonLight);
@@ -82,13 +82,40 @@ box(11.4,.28,4.8,M.stone,2,.55,2.05);box(1.1,.5,4.8,M.dark,-3.2,.62,2.05);box(1.
 
 // A frozen low-poly gondola silhouette: just enough Venice to register.
 const gondola=new THREE.Group();
-const hull=new THREE.Mesh(new THREE.BoxGeometry(4.6,.28,.9),new THREE.MeshStandardMaterial({color:0x111216,roughness:.9}));
-hull.rotation.y=.16;gondola.add(hull);
-const bow=new THREE.Mesh(new THREE.ConeGeometry(.34,1.25,5),new THREE.MeshStandardMaterial({color:0x111216,roughness:.9}));
-bow.rotation.z=Math.PI/2;bow.rotation.y=-.16;bow.position.set(2.45,.18,.39);gondola.add(bow);
-const stern=bow.clone();stern.rotation.z=-Math.PI/2;stern.position.set(-2.45,.18,-.39);gondola.add(stern);
-const seat=new THREE.Mesh(new THREE.BoxGeometry(1.2,.18,.65),M.dark);seat.position.y=.24;gondola.add(seat);
-gondola.position.set(2,.13,12);gondola.rotation.y=-.12;scene.add(gondola);
+const hullMat=new THREE.MeshStandardMaterial({color:0x111216,roughness:.84,metalness:.08});
+const hull=new THREE.Mesh(new THREE.BoxGeometry(4.6,.28,.9),hullMat);
+hull.rotation.y=.12;gondola.add(hull);
+const bow=new THREE.Mesh(new THREE.ConeGeometry(.34,1.25,5),hullMat);
+bow.rotation.z=Math.PI/2;bow.rotation.y=-.12;bow.position.set(2.45,.18,.36);gondola.add(bow);
+const stern=bow.clone();stern.rotation.z=-Math.PI/2;stern.position.set(-2.45,.18,-.36);gondola.add(stern);
+const seat=new THREE.Mesh(new THREE.BoxGeometry(1.25,.18,.65),M.dark);seat.position.y=.25;gondola.add(seat);
+
+// A long, simple oar gives the boat a little more character while it moves.
+const oarMat=new THREE.MeshStandardMaterial({color:0x79543a,roughness:.86});
+const oar=new THREE.Mesh(new THREE.BoxGeometry(3.5,.06,.10),oarMat);
+oar.position.set(-.55,.56,-.65);oar.rotation.z=-.08;oar.rotation.y=.18;gondola.add(oar);
+const blade=new THREE.Mesh(new THREE.BoxGeometry(.72,.09,.28),oarMat);
+blade.position.set(-2.12,.53,-.84);blade.rotation.y=.18;gondola.add(blade);
+
+const boatHome=new THREE.Vector3(6.65,.13,8.0);
+gondola.position.copy(boatHome);
+gondola.rotation.y=boatYaw;
+scene.add(gondola);
+
+// Small dock on the east bank. Walking up to the gondola boards it automatically.
+const dock=new THREE.Group();dock.position.set(8.45,0,8.0);scene.add(dock);
+const dockMat=new THREE.MeshStandardMaterial({color:0x654a35,roughness:.96});
+for(let i=0;i<4;i++){
+  const plank=new THREE.Mesh(new THREE.BoxGeometry(1.75,.12,.42),dockMat);
+  plank.position.set(.2,.12,-.64+i*.43);dock.add(plank);
+}
+for(const z of[-.68,.68]){
+  const post=new THREE.Mesh(new THREE.CylinderGeometry(.07,.09,1.45,6),dockMat);
+  post.position.set(.88,.65,z);dock.add(post);
+}
+const gondolaSign=makeLabel("GONDOLA","#17131a","#e8d39b");
+gondolaSign.position.set(1.1,1.6,0);gondolaSign.scale.multiplyScalar(.58);dock.add(gondolaSign);
+const dockLamp=new THREE.PointLight(0xffcb79,.75,7,1.8);dockLamp.position.set(.7,1.35,0);dock.add(dockLamp);
 
 block(-27,13,9,13,7.5,M.a);block(-27,-3,9,13,10,M.b);block(-27,-20,9,13,8.4,M.c);block(-10,-10,8.5,13,8.8,M.a);block(-10,-24,8.5,11,7.3,M.b);block(14,16,7,10,8.4,M.c);block(26,13,8,13,10,M.a);block(27,-4,8,14,8.2,M.b);block(27,-22,8,13,9.6,M.c);block(13,-29,10,6,7.8,M.a);
 
@@ -572,6 +599,7 @@ function closeKeyShopAfterLoss(){
 }
 
 function enemyHit(){
+  if(boating)return;
   const now=performance.now();
   if(now<enemyHitUntil||transitioning||gameComplete)return;
   enemyHitUntil=now+2400;
@@ -946,6 +974,7 @@ function enterSpring(){
     flakes.visible=false;
 
     resetCoins("spring");
+    resetBoat();
     resetSeasonKeyState();
     configureEnemies("spring");
     worldName.textContent="Spring";
@@ -978,6 +1007,7 @@ function enterSummer(){
     flakes.visible=false;
 
     resetCoins("summer");
+    resetBoat();
     resetSeasonKeyState();
     configureEnemies("summer");
     worldName.textContent="Summer";
@@ -1010,6 +1040,7 @@ function enterAutumn(){
     flakes.visible=false;
 
     resetCoins("autumn");
+    resetBoat();
     resetSeasonKeyState();
     configureEnemies("autumn");
     worldName.textContent="Autumn";
@@ -1048,9 +1079,93 @@ function audio(){
   );
 }
 
+const boatForward=new THREE.Vector3();
+
+function resetBoat(){
+  boating=false;
+  boatHasLeftDock=false;
+  boatYaw=-Math.PI/2;
+  gondola.position.copy(boatHome);
+  gondola.rotation.y=boatYaw;
+}
+
+function boardBoat(){
+  if(boating||transitioning||gameComplete||performance.now()<boatCooldown)return;
+  boating=true;
+  boatHasLeftDock=false;
+  boatCooldown=performance.now()+1200;
+  yaw=boatYaw;
+  pitch=-.04;
+  camera.rotation.set(pitch,yaw,0);
+  info.innerHTML=mobile
+    ?"GONDOLA RIDE · LEFT — SAIL · RIGHT — LOOK<br>RETURN TO THE DOCK TO STEP ASHORE"
+    :"GONDOLA RIDE · W/S — MOVE · A/D — STEER<br>RETURN TO THE DOCK TO STEP ASHORE";
+  info.classList.add("show");
+  setTimeout(()=>info.classList.remove("show"),3400);
+}
+
+function leaveBoat(){
+  boating=false;
+  boatHasLeftDock=false;
+  boatCooldown=performance.now()+1800;
+  camera.position.set(9.25,1.7,8.0);
+  yaw=-Math.PI/2;
+  pitch=-.03;
+  camera.rotation.set(pitch,yaw,0);
+  collectFlash.textContent="Back on the Fondamenta";
+  collectFlash.classList.add("show");
+  setTimeout(()=>collectFlash.classList.remove("show"),700);
+}
+
+function updateBoat(dt,t){
+  if(!started||transitioning||gameComplete)return;
+
+  if(!boating){
+    const boatAtDock=Math.hypot(gondola.position.x-boatHome.x,gondola.position.z-boatHome.z)<.9;
+    const playerNear=Math.hypot(camera.position.x-8.9,camera.position.z-8.0)<2.0;
+    if(boatAtDock&&playerNear&&performance.now()>boatCooldown)boardBoat();
+    return;
+  }
+
+  let steer=mobile?mx:((keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0));
+  let throttle=mobile?-my:((keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0));
+  if(Math.abs(steer)<.04)steer=0;
+  if(Math.abs(throttle)<.04)throttle=0;
+
+  boatYaw-=steer*1.18*dt*(.45+.55*Math.abs(throttle));
+  // Keep the boat broadly aligned with the canal so it remains easy to drive.
+  boatYaw=THREE.MathUtils.clamp(boatYaw,-2.42,-.72);
+
+  boatForward.set(Math.cos(boatYaw),0,-Math.sin(boatYaw));
+  const speed=3.0;
+  let nx=gondola.position.x+boatForward.x*throttle*speed*dt;
+  let nz=gondola.position.z+boatForward.z*throttle*speed*dt;
+
+  // Northern stretch of canal: enough room for a real ride without clipping the bridge.
+  nx=THREE.MathUtils.clamp(nx,-2.75,6.72);
+  nz=THREE.MathUtils.clamp(nz,5.65,27.2);
+  gondola.position.x=nx;
+  gondola.position.z=nz;
+  gondola.rotation.y=boatYaw;
+  gondola.position.y=.13+Math.sin(t*2.1)*.025;
+  oar.rotation.z=-.08+Math.sin(t*4.0)*.08*Math.abs(throttle);
+
+  if(Math.hypot(gondola.position.x-boatHome.x,gondola.position.z-boatHome.z)>3.2)boatHasLeftDock=true;
+
+  const behindX=-boatForward.x*.72,behindZ=-boatForward.z*.72;
+  camera.position.set(gondola.position.x+behindX,1.52,gondola.position.z+behindZ);
+
+  if(boatHasLeftDock&&Math.hypot(gondola.position.x-boatHome.x,gondola.position.z-boatHome.z)<.82&&Math.abs(throttle)<.3){
+    gondola.position.copy(boatHome);
+    gondola.rotation.y=-Math.PI/2;
+    boatYaw=-Math.PI/2;
+    leaveBoat();
+  }
+}
+
 const keys={},rad=.38,fwd=new THREE.Vector3(),right=new THREE.Vector3();let walkPhase=0,moveAmount=0;
 function lock(){renderer.domElement.requestPointerLock?.()}
-function begin(){started=true;veil.classList.add("hide");listener.context.resume().then(()=>audio()).catch(()=>audio());if(!mobile)lock();hud.classList.add("show");info.innerHTML=mobile?"6 ZECCHINI → KEY SHOP → DOOR · AVOID THE MASKS<br>LEFT — MOVE · RIGHT — LOOK":"6 ZECCHINI → KEY SHOP → DOOR · AVOID THE MASKS<br>WASD — MOVE · MOUSE — LOOK";info.classList.add("show");setTimeout(()=>info.classList.remove("show"),3600)}
+function begin(){started=true;veil.classList.add("hide");listener.context.resume().then(()=>audio()).catch(()=>audio());if(!mobile)lock();hud.classList.add("show");info.innerHTML=mobile?"6 ZECCHINI → KEY SHOP → DOOR · FIND THE GONDOLA<br>LEFT — MOVE · RIGHT — LOOK":"6 ZECCHINI → KEY SHOP → DOOR · FIND THE GONDOLA<br>WASD — MOVE · MOUSE — LOOK";info.classList.add("show");setTimeout(()=>info.classList.remove("show"),3600)}
 enter.onclick=begin;resume.onclick=()=>{listener.context.resume().catch(()=>{});if(!mobile)lock()};
 document.addEventListener("pointerlockchange",()=>{if(started&&!mobile)pause.classList.toggle("show",document.pointerLockElement!==renderer.domElement)});
 document.addEventListener("mousemove",e=>{if(document.pointerLockElement!==renderer.domElement)return;yaw-=e.movementX*.0019;pitch=THREE.MathUtils.clamp(pitch-e.movementY*.0019,-1.1,1.05);camera.rotation.set(pitch,yaw,0)});
@@ -1065,7 +1180,7 @@ lookZone.addEventListener("touchmove",e=>{for(const t of e.changedTouches){if(t.
 lookZone.addEventListener("touchend",e=>{for(const t of e.changedTouches)if(t.identifier===lookId)lookId=null;e.preventDefault()},{passive:false});lookZone.addEventListener("touchcancel",()=>lookId=null);
 
 function collide(x,z){if(x<-C.bound||x>C.bound||z<-C.bound||z>C.bound)return true;for(const o of obs)if(x+rad>o.x1&&x-rad<o.x2&&z+rad>o.z1&&z-rad<o.z2)return true;return false}
-function move(dt){if(!started||(!mobile&&document.pointerLockElement!==renderer.domElement)){moveAmount=0;return}let x=mobile?mx:((keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0)),z=mobile?my:((keys.KeyS||keys.ArrowDown?1:0)-(keys.KeyW||keys.ArrowUp?1:0));if(Math.abs(x)<.02&&Math.abs(z)<.02){moveAmount+=(0-moveAmount)*Math.min(1,dt*8);camera.position.y=1.7+Math.sin(walkPhase)*.018*moveAmount;return}const n=Math.hypot(x,z);if(n>1){x/=n;z/=n}moveAmount+=(Math.min(1,n)-moveAmount)*Math.min(1,dt*10);walkPhase+=dt*8.2*Math.max(.25,moveAmount);fwd.set(-Math.sin(yaw),0,-Math.cos(yaw));right.set(Math.cos(yaw),0,-Math.sin(yaw));const dx=(right.x*x+fwd.x*-z)*C.speed*dt,dz=(right.z*x+fwd.z*-z)*C.speed*dt;if(!collide(camera.position.x+dx,camera.position.z))camera.position.x+=dx;if(!collide(camera.position.x,camera.position.z+dz))camera.position.z+=dz;camera.position.y=1.7+Math.sin(walkPhase)*.025*moveAmount}
+function move(dt){if(boating){moveAmount=0;return}if(!started||(!mobile&&document.pointerLockElement!==renderer.domElement)){moveAmount=0;return}let x=mobile?mx:((keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0)),z=mobile?my:((keys.KeyS||keys.ArrowDown?1:0)-(keys.KeyW||keys.ArrowUp?1:0));if(Math.abs(x)<.02&&Math.abs(z)<.02){moveAmount+=(0-moveAmount)*Math.min(1,dt*8);camera.position.y=1.7+Math.sin(walkPhase)*.018*moveAmount;return}const n=Math.hypot(x,z);if(n>1){x/=n;z/=n}moveAmount+=(Math.min(1,n)-moveAmount)*Math.min(1,dt*10);walkPhase+=dt*8.2*Math.max(.25,moveAmount);fwd.set(-Math.sin(yaw),0,-Math.cos(yaw));right.set(Math.cos(yaw),0,-Math.sin(yaw));const dx=(right.x*x+fwd.x*-z)*C.speed*dt,dz=(right.z*x+fwd.z*-z)*C.speed*dt;if(!collide(camera.position.x+dx,camera.position.z))camera.position.x+=dx;if(!collide(camera.position.x,camera.position.z+dz))camera.position.z+=dz;camera.position.y=1.7+Math.sin(walkPhase)*.025*moveAmount}
 
 let foundAt=0;
 function mood(t){
@@ -1094,7 +1209,7 @@ function mood(t){
 }
 
 const clock=new THREE.Clock();
-function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.05),t=clock.elapsedTime;move(dt);
+function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.05),t=clock.elapsedTime;updateBoat(dt,t);move(dt);
 const gust=.72+.28*(.5+.5*Math.sin(t*.19));
 const particleFactor=world==="winter"?(done?1.75:1):(world==="spring"?.34:(world==="summer"?.12:.48));
 const p=flakes.geometry.attributes.position.array,b=particleFactor*gust;
