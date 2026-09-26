@@ -549,11 +549,28 @@ function makeLabel(text,bg="#2b201d",fg="#fff1c7"){
   lines.forEach((line,i)=>x.fillText(line,384,y0+i*gap));
   x.shadowBlur=0;x.shadowOffsetY=0;
 
-  const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;
+  const tex=new THREE.CanvasTexture(canvas);
+  tex.colorSpace=THREE.SRGBColorSpace;
+  tex.magFilter=THREE.NearestFilter;
   tex.minFilter=THREE.LinearFilter;
-  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
-  sprite.scale.set(4.85,1.46,1);
-  return sprite;
+
+  // Real in-world sign geometry instead of a camera-facing sprite.
+  const g=new THREE.Group();
+  const boardMat=new THREE.MeshStandardMaterial({color:0x281d1b,roughness:.96,metalness:0});
+  const board=new THREE.Mesh(new THREE.BoxGeometry(4.85,1.46,.11),boardMat);
+  g.add(board);
+
+  const faceMat=new THREE.MeshBasicMaterial({map:tex,depthTest:true,depthWrite:true});
+  const front=new THREE.Mesh(new THREE.PlaneGeometry(4.72,1.33),faceMat);
+  front.position.z=.061;
+  g.add(front);
+
+  const rear=new THREE.Mesh(new THREE.PlaneGeometry(4.72,1.33),faceMat);
+  rear.position.z=-.061;
+  rear.rotation.y=Math.PI;
+  g.add(rear);
+
+  return g;
 }
 
 function makeKeyModel(scale=1){
@@ -584,7 +601,7 @@ for(const x of[-1.45,1.45]){
 }
 const awningMat=new THREE.MeshStandardMaterial({color:0x7f2637,roughness:.86});
 const awning=new THREE.Mesh(new THREE.BoxGeometry(3.65,.16,1.18),awningMat);awning.position.set(0,2.7,-.18);awning.rotation.x=-.14;keyShop.add(awning);
-const shopSign=makeLabel("KEY SHOP");shopSign.position.set(0,3.45,.78);keyShop.add(shopSign);
+const shopSign=makeLabel("KEY SHOP");shopSign.position.set(0,3.45,.82);shopSign.scale.set(.82,.82,.82);keyShop.add(shopSign);
 const shopKey=makeKeyModel(.95);shopKey.position.set(0,2.05,-.72);shopKey.rotation.y=.2;keyShop.add(shopKey);
 const shopGlow=new THREE.PointLight(0xffca69,.7,8,1.7);shopGlow.position.set(0,2.1,-.7);keyShop.add(shopGlow);
 
@@ -617,7 +634,7 @@ const doorKeyhole=new THREE.Group();
 const khTop=new THREE.Mesh(new THREE.CircleGeometry(.12,12),doorGold);khTop.position.set(0,1.52,.18);doorKeyhole.add(khTop);
 const khStem=new THREE.Mesh(new THREE.BoxGeometry(.09,.28,.05),doorGold);khStem.position.set(0,1.32,.18);doorKeyhole.add(khStem);
 seasonDoor.add(doorKeyhole);
-const doorLabel=makeLabel("DOOR OF SEASONS","#15111c","#dcc27b");doorLabel.position.set(0,3.72,.02);doorLabel.scale.multiplyScalar(.82);seasonDoor.add(doorLabel);
+const doorLabel=makeLabel("DOOR OF SEASONS","#15111c","#dcc27b");doorLabel.position.set(0,3.72,.08);doorLabel.scale.multiplyScalar(.82);seasonDoor.add(doorLabel);
 const doorGlow=new THREE.PointLight(0x6f88c9,.5,8,2);doorGlow.position.set(0,1.6,.6);seasonDoor.add(doorGlow);
 
 const doorStars=[];
@@ -1018,7 +1035,7 @@ const storefrontB=makeStorefront(22.15,10.5,-Math.PI/2);
 function setStoreSign(store,name){
   if(store.sign)store.group.remove(store.sign);
   store.sign=makeLabel(name.toUpperCase(),"#171219","#e8cf95");
-  store.sign.position.set(0,3.48,.08);store.sign.scale.multiplyScalar(.72);store.group.add(store.sign);
+  store.sign.position.set(0,3.48,.02);store.sign.scale.multiplyScalar(.72);store.group.add(store.sign);
 }
 
 function updateSeasonShops(season){
