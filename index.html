@@ -612,8 +612,8 @@ function makeShopProduct(type){
       top.position.set((i-1)*.42,.43,0);g.add(top);
     }
   }else if(type==="bread"){
-    const loaf=new THREE.Mesh(new THREE.CapsuleGeometry(.26,.65,5,8),new THREE.MeshStandardMaterial({color:0xc98d4c,roughness:.94}));
-    loaf.rotation.z=Math.PI/2;loaf.position.y=.22;g.add(loaf);
+    const loaf=new THREE.Mesh(new THREE.SphereGeometry(.42,12,8),new THREE.MeshStandardMaterial({color:0xc98d4c,roughness:.94}));
+    loaf.scale.set(1.45,.72,.82);loaf.position.y=.22;g.add(loaf);
   }else if(type==="cloth"){
     for(let i=0;i<3;i++){
       const roll=new THREE.Mesh(new THREE.CylinderGeometry(.16,.16,.82,10),new THREE.MeshStandardMaterial({color:i===0?0x7f2944:i===1?0x335d72:0xb08b3e,roughness:.82}));
