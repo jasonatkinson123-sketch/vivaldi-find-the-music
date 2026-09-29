@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>Vivaldi: Collect the Zecchini</title>
-<link rel="preload" href="assets/audio/four-seasons/winter-1-allegro-non-molto.mp3" as="audio" type="audio/mpeg">
+<link rel="preload" href="assets/audio/four-seasons/spring-1-allegro.mp3" as="audio" type="audio/mpeg">
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#08101d;color:#f2f2ef;font-family:Helvetica,Arial,sans-serif;touch-action:none}canvas{display:block}
 #veil,#info,#found,#pause,#touch{position:fixed;inset:0}#veil{z-index:20;display:grid;place-items:center;background:#000;transition:opacity 1.1s;pointer-events:auto}#veil.hide{opacity:0;pointer-events:none}
@@ -2288,117 +2288,83 @@ for(let i=0;i<48;i++){
 const sp=new Float32Array(C.snow*3),ss=new Float32Array(C.snow);for(let i=0;i<C.snow;i++){sp[i*3]=THREE.MathUtils.randFloatSpread(65);sp[i*3+1]=THREE.MathUtils.randFloat(.5,24);sp[i*3+2]=THREE.MathUtils.randFloatSpread(65);ss[i]=THREE.MathUtils.randFloat(.55,1.25)}
 const sg=new THREE.BufferGeometry();sg.setAttribute("position",new THREE.BufferAttribute(sp,3));const flakes=new THREE.Points(sg,new THREE.PointsMaterial({color:0xe8f1ff,size:.09,transparent:true,opacity:.72,depthWrite:false}));scene.add(flakes);
 
-const listener=new THREE.AudioListener();camera.add(listener);const music=new THREE.PositionalAudio(listener);shrine.add(music);music.setRefDistance(2);music.setMaxDistance(90);music.setRolloffFactor(1);music.setDistanceModel("linear");music.setLoop(false);music.setVolume(1);
-const low=listener.context.createBiquadFilter();low.type="lowpass";low.frequency.value=1100;low.Q.value=.6;music.setFilter(low);let loaded=false,requested=false;
-const recordingLoader=new THREE.AudioLoader();
-const seasonTracks={
-  winter:[
-    "assets/audio/four-seasons/winter-1-allegro-non-molto.mp3",
-    "assets/audio/four-seasons/winter-2-largo.mp3",
-    "assets/audio/four-seasons/winter-3-allegro.mp3"
-  ],
-  spring:[
-    "assets/audio/four-seasons/spring-1-allegro.mp3",
-    "assets/audio/four-seasons/spring-2-largo.mp3",
-    "assets/audio/four-seasons/spring-3-allegro.mp3"
-  ],
-  summer:[
-    "assets/audio/four-seasons/summer-1-allegro-non-molto.mp3",
-    "assets/audio/four-seasons/summer-2-adagio.mp3",
-    "assets/audio/four-seasons/summer-3-presto.mp3"
-  ],
-  autumn:[
-    "assets/audio/four-seasons/autumn-1-allegro.mp3",
-    "assets/audio/four-seasons/autumn-2-adagio-molto.mp3",
-    "assets/audio/four-seasons/autumn-3-allegro.mp3"
-  ]
-};
-const nextSeason={winter:"spring",spring:"summer",summer:"autumn",autumn:null};
-const decodedMovements=new Map();
-const loadingMovements=new Map();
-let soundtrackToken=0,soundtrackSeason="winter",soundtrackIndex=0;
+const listener=new THREE.AudioListener();camera.add(listener);
+const music=new THREE.PositionalAudio(listener);shrine.add(music);
+music.setRefDistance(8);music.setMaxDistance(90);music.setRolloffFactor(.6);music.setDistanceModel("linear");music.setVolume(1);
+const low=listener.context.createBiquadFilter();low.type="lowpass";low.frequency.value=1100;low.Q.value=.6;music.setFilter(low);
+let loaded=false,requested=false,musicBuffer=null,musicLoading=null;
 
-function preloadMovement(url){
-  if(decodedMovements.has(url))return Promise.resolve(decodedMovements.get(url));
-  if(loadingMovements.has(url))return loadingMovements.get(url);
+const MUSIC_SOURCE="assets/audio/four-seasons/spring-1-allegro.mp3";
+const LOOP_START=.15;
+const LOOP_LENGTH=12.0;
 
-  const pending=new Promise((resolve,reject)=>{
-    recordingLoader.load(
-      url,
-      buffer=>{
-        decodedMovements.set(url,buffer);
-        loadingMovements.delete(url);
-        resolve(buffer);
+// Keep only the instantly recognizable opening of Spring in memory.
+// The source recording is decoded once, then copied into a tiny looping AudioBuffer.
+function makeFamousSpringClip(source){
+  const ctx=listener.context;
+  const start=Math.min(source.length-1,Math.floor(LOOP_START*source.sampleRate));
+  const frames=Math.min(
+    Math.floor(LOOP_LENGTH*source.sampleRate),
+    source.length-start
+  );
+  const clip=ctx.createBuffer(source.numberOfChannels,frames,source.sampleRate);
+  const fadeFrames=Math.min(Math.floor(.08*source.sampleRate),Math.floor(frames/8));
+
+  for(let ch=0;ch<source.numberOfChannels;ch++){
+    const src=source.getChannelData(ch);
+    const dst=clip.getChannelData(ch);
+    for(let i=0;i<frames;i++)dst[i]=src[start+i];
+
+    // Tiny edge fades prevent a digital click at the loop seam.
+    for(let i=0;i<fadeFrames;i++){
+      const a=i/fadeFrames;
+      dst[i]*=a;
+      dst[frames-1-i]*=a;
+    }
+  }
+  return clip;
+}
+
+function preloadMusicLoop(){
+  if(musicBuffer)return Promise.resolve(musicBuffer);
+  if(musicLoading)return musicLoading;
+
+  musicLoading=new Promise((resolve,reject)=>{
+    new THREE.AudioLoader().load(
+      MUSIC_SOURCE,
+      source=>{
+        musicBuffer=makeFamousSpringClip(source);
+        musicLoading=null;
+        loaded=true;
+        resolve(musicBuffer);
       },
       undefined,
-      error=>{
-        loadingMovements.delete(url);
-        reject(error);
+      err=>{
+        musicLoading=null;
+        reject(err);
       }
     );
   });
-  loadingMovements.set(url,pending);
-  return pending;
+  return musicLoading;
 }
 
-function playDecodedMovement(season,index,token,buffer){
-  if(token!==soundtrackToken||world!==season)return;
-  const tracks=seasonTracks[season];
-  if(!tracks||!tracks.length)return;
-  const safeIndex=((index%tracks.length)+tracks.length)%tracks.length;
-
-  if(music.isPlaying)music.stop();
-  music.setBuffer(buffer);
-  music.setLoop(false);
-  music.setVolume(1);
-  music.setRefDistance(8);
-  music.setRolloffFactor(.6);
-  loaded=true;
-  low.frequency.setValueAtTime(15000,listener.context.currentTime);
-  music.play();
-
-  if(music.source){
-    const src=music.source;
-    src.onended=()=>{
-      music.onEnded();
-      if(token!==soundtrackToken||world!==season||transitioning)return;
-      soundtrackIndex=(safeIndex+1)%tracks.length;
-      loadSeasonMovement(season,soundtrackIndex,token);
-    };
-  }
-
-  preloadMovement(tracks[(safeIndex+1)%tracks.length]).catch(()=>{});
-  const upcoming=nextSeason[season];
-  if(safeIndex===0&&upcoming)preloadMovement(seasonTracks[upcoming][0]).catch(()=>{});
+function startMusicLoop(){
+  preloadMusicLoop()
+    .then(buffer=>{
+      if(music.isPlaying)return;
+      music.setBuffer(buffer);
+      music.setLoop(true);
+      music.setLoopStart(0);
+      music.setLoopEnd(buffer.duration);
+      music.setVolume(1);
+      low.frequency.setValueAtTime(15000,listener.context.currentTime);
+      music.play();
+    })
+    .catch(()=>console.info("Spring loop could not be loaded."));
 }
 
-function loadSeasonMovement(season,index,token){
-  const tracks=seasonTracks[season];
-  if(!tracks||!tracks.length)return;
-  const safeIndex=((index%tracks.length)+tracks.length)%tracks.length;
-  const url=tracks[safeIndex];
-
-  preloadMovement(url)
-    .then(buffer=>playDecodedMovement(season,safeIndex,token,buffer))
-    .catch(()=>{
-      if(token===soundtrackToken&&world===season){
-        console.info("Season recording could not be loaded:",url);
-      }
-    });
-}
-
-function startSeasonSoundtrack(season){
-  const token=++soundtrackToken;
-  soundtrackSeason=season;
-  soundtrackIndex=0;
-  loaded=false;
-  if(music.isPlaying)music.stop();
-  loadSeasonMovement(season,0,token);
-}
-
-// Fetch/decode Winter before the player enters. Audio still starts only after
-// the Enter tap/click resumes the browser AudioContext.
-preloadMovement(seasonTracks.winter[0]).catch(()=>{});
+// Begin loading while the title screen is visible.
+preloadMusicLoop().catch(()=>{});
 
 function setSeasonTitle(name){
   found.querySelector(".n").textContent="Antonio Vivaldi";
@@ -2440,7 +2406,7 @@ function enterSpring(){
     configureEnemies("spring");
     worldName.textContent="Spring";
     resetPlayer();
-    startSeasonSoundtrack("spring");
+    startMusicLoop();
     setSeasonTitle("Spring");
 
     worldFade.classList.remove("show");
@@ -2474,7 +2440,7 @@ function enterSummer(){
     configureEnemies("summer");
     worldName.textContent="Summer";
     resetPlayer();
-    startSeasonSoundtrack("summer");
+    startMusicLoop();
     setSeasonTitle("Summer");
 
     worldFade.classList.remove("show");
@@ -2508,7 +2474,7 @@ function enterAutumn(){
     configureEnemies("autumn");
     worldName.textContent="Autumn";
     resetPlayer();
-    startSeasonSoundtrack("autumn");
+    startMusicLoop();
     setSeasonTitle("Autumn");
 
     worldFade.classList.remove("show");
@@ -2519,7 +2485,7 @@ function enterAutumn(){
 function audio(){
   if(requested){if(loaded&&!music.isPlaying)music.play();return}
   requested=true;
-  startSeasonSoundtrack("winter");
+  startMusicLoop();
 }
 
 const boatForward=new THREE.Vector3();
